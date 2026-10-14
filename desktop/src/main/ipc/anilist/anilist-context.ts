@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+import type { UpcomingSeasonsResult } from "@/shared/upcoming-seasons-types";
 import type {
   AniListFavouritesPageResult,
   AniListIntegrationStatus,
@@ -28,6 +29,7 @@ import {
   ANILIST_SUBMIT_MANUAL_TOKEN_CHANNEL,
   ANILIST_SYNC_WATCH_PROGRESS_CHANNEL,
   ANILIST_TOGGLE_FAVOURITE_CHANNEL,
+  ANILIST_UPCOMING_SEASONS_CHANNEL,
 } from "./anilist-channels";
 
 export function exposeAniListContext() {
@@ -62,5 +64,7 @@ export function exposeAniListContext() {
       ipcRenderer.invoke(ANILIST_TOGGLE_FAVOURITE_CHANNEL, mediaId) as Promise<boolean>,
     syncWatchProgress: (input: AniListSyncWatchProgressInput) =>
       ipcRenderer.invoke(ANILIST_SYNC_WATCH_PROGRESS_CHANNEL, input) as Promise<AniListListEntry | null>,
+    getUpcomingSeasons: (force?: boolean) =>
+      ipcRenderer.invoke(ANILIST_UPCOMING_SEASONS_CHANNEL, force) as Promise<UpcomingSeasonsResult>,
   });
 }

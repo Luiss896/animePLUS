@@ -1,4 +1,12 @@
-import { Bookmark, History, Home, type LucideIcon, Search, Settings } from "lucide-react";
+import {
+  Bookmark,
+  CalendarClock,
+  History,
+  Home,
+  type LucideIcon,
+  Search,
+  Settings,
+} from "lucide-react";
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -35,6 +43,11 @@ const navbarItems: NavItem[] = [
     title: "History",
     href: "/history",
     icon: History,
+  },
+  {
+    title: "Following",
+    href: "/following",
+    icon: CalendarClock,
   },
   {
     title: "Settings",

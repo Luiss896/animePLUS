@@ -14,3 +14,4 @@ export const ANILIST_SAVE_LIST_ENTRY_CHANNEL = "anilist:save-list-entry";
 export const ANILIST_DELETE_LIST_ENTRY_CHANNEL = "anilist:delete-list-entry";
 export const ANILIST_TOGGLE_FAVOURITE_CHANNEL = "anilist:toggle-favourite";
 export const ANILIST_SYNC_WATCH_PROGRESS_CHANNEL = "anilist:sync-watch-progress";
+export const ANILIST_UPCOMING_SEASONS_CHANNEL = "anilist:upcoming-seasons";

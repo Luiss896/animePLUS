@@ -23,6 +23,7 @@ import {
   ANILIST_SUBMIT_MANUAL_TOKEN_CHANNEL,
   ANILIST_SYNC_WATCH_PROGRESS_CHANNEL,
   ANILIST_TOGGLE_FAVOURITE_CHANNEL,
+  ANILIST_UPCOMING_SEASONS_CHANNEL,
 } from "./anilist-channels";
 import { fetchAniListFavourites, toggleAniListFavourite } from "./anilist-favourites";
 import {
@@ -41,6 +42,7 @@ import {
 import { getAniListPopularSeasonAnime } from "./anilist-popular-season";
 import { searchAniListMedia } from "./anilist-search";
 import { getAniListShowDetails } from "./anilist-show-details";
+import { fetchUpcomingSeasons } from "./anilist-upcoming-seasons";
 
 export function addAniListListeners() {
   ipcMain.handle(ANILIST_SHOW_DETAILS_CHANNEL, (_event, mediaId: number) =>
@@ -91,5 +93,9 @@ export function addAniListListeners() {
       if (isIncognitoEnabled()) return null;
       return syncAniListWatchProgress(input);
     }
+  );
+
+  ipcMain.handle(ANILIST_UPCOMING_SEASONS_CHANNEL, (_event, force?: boolean) =>
+    fetchUpcomingSeasons({ force: force === true })
   );
 }

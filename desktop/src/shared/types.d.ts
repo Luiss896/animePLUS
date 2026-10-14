@@ -1,5 +1,6 @@
 import { AppUpdateCheckResult } from "./app-update-types";
 import type { SearchFilterDefinition, SearchFilterValues } from "./search-filters";
+import type { UpcomingSeasonsResult } from "./upcoming-seasons-types";
 
 interface ThemeContext {
   toggle: () => Promise<boolean>;
@@ -428,6 +429,8 @@ export interface AniListContext {
   deleteListEntry: (listEntryId: number) => Promise<void>;
   toggleFavourite: (mediaId: number) => Promise<boolean>;
   syncWatchProgress: (input: AniListSyncWatchProgressInput) => Promise<AniListListEntry | null>;
+  /** Upcoming seasons for shows on the user's list. `force` bypasses the cache. */
+  getUpcomingSeasons: (force?: boolean) => Promise<UpcomingSeasonsResult>;
 }
 
 declare global {
