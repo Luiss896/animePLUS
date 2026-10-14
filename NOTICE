@@ -1,0 +1,79 @@
+animePLUS
+Copyright (C) 2025 Luiss896
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------
+ADDITIONAL TERMS UNDER SECTION 7 OF THE AGPL
+--------------------------------------------------------------------------
+
+Pursuant to section 7 of the GNU Affero General Public License, the
+following additional terms apply to this work:
+
+1. ATTRIBUTION AND ORIGIN.
+   You must preserve this NOTICE file and the copyright notice above in
+   all copies and modified versions. Modified versions must carry
+   prominent notices stating that they were modified, along with the
+   relevant date, and must not misrepresent the origin of the material.
+
+2. NO ENDORSEMENT / NO NAME USE.
+   The names "animePLUS" and "Luiss896", and any associated logos, may
+   not be used to endorse or promote products derived from this work
+   without specific prior written permission.
+
+3. NETWORK USE (AGPL SECTION 13).
+   If you run a modified version of this program on a server and let
+   other users interact with it over a network, you must offer those
+   users access to the Corresponding Source of your version at no
+   charge, as required by section 13 of the AGPL.
+
+--------------------------------------------------------------------------
+WHAT THIS MEANS IN PRACTICE
+--------------------------------------------------------------------------
+
+- You MAY read, study, run and modify this code for yourself.
+- You MAY redistribute it, but ONLY under the same AGPL-3.0-or-later
+  terms: the source must stay open, this notice must stay intact, and
+  any network service built on a modified version must publish its
+  source too.
+- You may NOT take this code, close it, and ship it as your own
+  proprietary or rebranded product. Doing so is a copyright violation
+  and terminates your license automatically under section 8.
+
+For permissions beyond the scope of this license, contact the copyright
+holder.
+
+--------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------
+
+This project depends on third-party open-source packages, each governed
+by its own license. Notable ones:
+
+- Anime4K / anime4k-webgpu — MIT
+- @videojs/react, @videojs/core — Apache-2.0
+- React, React DOM — MIT
+- Electron — MIT
+- FFmpeg (bundled binary) — LGPL/GPL, see https://ffmpeg.org/legal.html
+
+The licenses of these components are not affected by the terms above.
+
+--------------------------------------------------------------------------
+DISCLAIMER
+--------------------------------------------------------------------------
+
+animePLUS is a client application. It does not host, store, or
+distribute any video content. All media is fetched from third-party
+services chosen by the user. The authors take no responsibility for how
+those services operate or for the content they serve.

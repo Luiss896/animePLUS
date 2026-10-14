@@ -1,0 +1,144 @@
+import { contextBridge, ipcRenderer } from "electron";
+
+import type { SearchFilterDefinition, SearchFilterValues } from "@/shared/search-filters";
+import { Episode, ShowSearchResult } from "@/shared/types";
+import type { StreamProviderName } from "@/shared/stream-providers";
+
+import {
+  STREAM_PROVIDER_ACTIVE_GET_CHANNEL,
+  STREAM_PROVIDER_ACTIVE_SET_CHANNEL,
+  STREAM_PROVIDER_EPISODES_CHANNEL,
+  STREAM_PROVIDER_PREPARE_TRANSCODE_CHANNEL,
+  STREAM_PROVIDER_CANCEL_TRANSCODE_CHANNEL,
+  STREAM_PROVIDER_QUALITY_SNAPSHOT_CHANNEL,
+  STREAM_PROVIDER_RECENT_UPLOADS_CHANNEL,
+  STREAM_PROVIDER_SEARCH_CHANNEL,
+  STREAM_PROVIDER_SEARCH_FILTERS_CHANNEL,
+  STREAM_PROVIDER_SHOW_DETAILS_CHANNEL,
+  STREAM_PROVIDER_STREAM_PROXY_BASE_CHANNEL,
+  STREAM_PROVIDER_TRANSCODE_PROGRESS_CHANNEL,
+  STREAM_PROVIDER_STREAM_URL_CHANNEL,
+} from "./stream-provider-channels";
+
+export interface StreamUrlResult {
+  url: string;
+  referer: string;
+  subtitles?: Array<{
+    url: string;
+    language: string;
+    format: string;
+    default?: boolean;
+  }>;
+  qualities?: Array<{
+    id: string;
+    label: string;
+    height?: number;
+    bandwidth?: number;
+  }>;
+  selectedQuality?: string;
+}
+
+export interface TranscodeProgressResult {
+  state: "idle" | "running" | "done" | "error";
+  progressPercent: number | null;
+  message: string;
+}
+
+export type { StreamProviderName };
+
+export function exposeStreamProviderContext() {
+  contextBridge.exposeInMainWorld("streamProvider", {
+    getActiveProvider: () =>
+      ipcRenderer.invoke(STREAM_PROVIDER_ACTIVE_GET_CHANNEL) as Promise<StreamProviderName>,
+    setActiveProvider: (provider: StreamProviderName) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_ACTIVE_SET_CHANNEL,
+        provider
+      ) as Promise<StreamProviderName>,
+    search: (query: string, filters?: SearchFilterValues) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_SEARCH_CHANNEL,
+        query,
+        filters
+      ) as Promise<ShowSearchResult[]>,
+    getSearchFilters: () =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_SEARCH_FILTERS_CHANNEL
+      ) as Promise<SearchFilterDefinition[]>,
+    getEpisodes: (providerId: string, mode?: "sub" | "dub", providerName?: StreamProviderName) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_EPISODES_CHANNEL,
+        providerId,
+        mode ?? "sub",
+        providerName
+      ) as Promise<string[]>,
+    getStreamUrl: (
+      id: string | null,
+      providerId: string | null,
+      episode: string,
+      mode?: "sub" | "dub",
+      providerName?: StreamProviderName
+    ) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_STREAM_URL_CHANNEL,
+        id,
+        providerId,
+        episode,
+        mode ?? "sub",
+        providerName
+      ) as Promise<StreamUrlResult>,
+    getStreamProxyBaseUrl: () =>
+      ipcRenderer.invoke(STREAM_PROVIDER_STREAM_PROXY_BASE_CHANNEL) as Promise<string>,
+    prepareTranscodedStream: (
+      targetUrl: string,
+      referer: string | null,
+      variant?: string | null
+    ) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_PREPARE_TRANSCODE_CHANNEL as string,
+        targetUrl,
+        referer,
+        variant ?? null
+      ) as Promise<boolean>,
+    cancelTranscodedStream: (targetUrl: string, variant?: string | null) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_CANCEL_TRANSCODE_CHANNEL as string,
+        targetUrl,
+        variant ?? null
+      ) as Promise<boolean>,
+    getTranscodeProgress: (targetUrl: string, variant?: string | null) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_TRANSCODE_PROGRESS_CHANNEL as string,
+        targetUrl,
+        variant ?? null
+      ) as Promise<TranscodeProgressResult>,
+    getShowDetails: (providerId: string, providerName?: StreamProviderName) =>
+      ipcRenderer.invoke(
+        STREAM_PROVIDER_SHOW_DETAILS_CHANNEL,
+        providerId,
+        providerName
+      ) as Promise<{
+        id: string;
+        providerId: string;
+        name: string;
+        thumbnail: string | null;
+        type: string;
+        description?: string | null;
+      }>,
+    getRecentUploads: (page: number, limit?: number) =>
+      ipcRenderer.invoke(STREAM_PROVIDER_RECENT_UPLOADS_CHANNEL, page, limit) as Promise<Episode[]>,
+    /**
+     * What the upstream ladder actually offered for the master most recently
+     * served through the proxy. The renderer cannot read this itself because the
+     * proxy collapses the master before the player sees it.
+     */
+    getLastQualitySnapshot: () =>
+      ipcRenderer.invoke(STREAM_PROVIDER_QUALITY_SNAPSHOT_CHANNEL) as Promise<{
+        servedHeight: number | null;
+        maxHeight: number | null;
+        meetsPreferred: boolean;
+        variantCount: number;
+        observedAt: number;
+      } | null>,
+  });
+}

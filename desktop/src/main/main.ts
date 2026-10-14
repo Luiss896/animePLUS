@@ -1,0 +1,148 @@
+import { BrowserWindow, app, nativeTheme } from "electron";
+// @ts-expect-error no types
+import started from "electron-squirrel-startup";
+import path from "path";
+import { type IUpdateElectronAppOptions, updateElectronApp } from "update-electron-app";
+
+import { initElectronUserAgent } from "@/main/electron-user-agent";
+import { APP_PROTOCOL, completeAniListOAuthFromDeepLink } from "@/main/ipc/anilist/anilist-oauth";
+import { registerListeners } from "@/main/ipc/listeners";
+import { initLogger } from "@/main/logger";
+import { isAppShuttingDown, shutdownBackgroundResources } from "@/main/shutdown";
+import { startStreamProxy } from "@/main/stream-proxy";
+
+initLogger();
+
+/**
+ * WebGPU must be opted into explicitly on Electron 31: without these switches
+ * `navigator.gpu` is undefined in the renderer and the Anime4K shader pipeline
+ * silently degrades to plain video playback.
+ *
+ * - `enable-unsafe-webgpu`: Chromium still gates WebGPU behind this flag for
+ *   non-Chromium-branded embedders such as Electron.
+ * - `enable-vulkan`: gives Windows/Linux a hardware backend instead of falling
+ *   back to SwiftShader (software), which cannot run Anime4K in real time.
+ * - `force_high_performance_gpu`: prefers the discrete GPU on hybrid laptops.
+ *
+ * These must be registered before `app.whenReady()`.
+ */
+app.commandLine.appendSwitch("enable-unsafe-webgpu");
+app.commandLine.appendSwitch("enable-vulkan");
+app.commandLine.appendSwitch("force_high_performance_gpu");
+
+if (started) {
+  app.quit();
+}
+
+const runUpdateElectronApp = updateElectronApp as (opts?: IUpdateElectronAppOptions) => void;
+
+const checkForUpdates = () => {
+  if (process.platform === "darwin") return;
+
+  runUpdateElectronApp({
+    updateSource: {
+      type: 0, // UpdateSourceType.ElectronPublicUpdateService
+      repo: "Luiss896/animePLUS",
+    },
+  });
+};
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+function protocolPrefix() {
+  return `${APP_PROTOCOL}://`;
+}
+
+function findDeepLinkArg(argv: string[]): string | undefined {
+  return argv.find((arg) => arg.startsWith(protocolPrefix()));
+}
+
+function registerAppProtocol() {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    return;
+  }
+  app.setAsDefaultProtocolClient(APP_PROTOCOL);
+}
+
+const createWindow = () => {
+  // Dark until the renderer applies a saved light or system preference.
+  nativeTheme.themeSource = "dark";
+
+  // Create the browser window.
+  const mainWindow = new BrowserWindow({
+    width: 1320,
+    height: 800,
+    backgroundColor: "#09090b",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: true,
+      nodeIntegrationInWorker: true,
+      devTools: !app.isPackaged,
+    },
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+    trafficLightPosition: process.platform === "darwin" ? { x: 16, y: 16 } : undefined,
+  });
+
+  // and load the index.html of the app.
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    void mainWindow.loadFile(
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
+    );
+  }
+
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
+
+  mainWindow.on("closed", () => {
+    shutdownBackgroundResources();
+    app.quit();
+  });
+};
+
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+app.on("ready", () => {
+  initElectronUserAgent();
+  registerAppProtocol();
+  registerListeners();
+  void startStreamProxy().then(() => {
+    createWindow();
+    checkForUpdates();
+    const initialDeepLink = findDeepLinkArg(process.argv);
+    if (initialDeepLink) {
+      completeAniListOAuthFromDeepLink(initialDeepLink);
+    }
+  });
+});
+
+// Hidden provider windows are destroyed on shutdown so this event can fire
+// after the user closes the visible window. We quit on all platforms.
+app.on("window-all-closed", () => {
+  shutdownBackgroundResources();
+  app.quit();
+});
+
+app.on("before-quit", () => {
+  shutdownBackgroundResources();
+});
+
+app.on("activate", () => {
+  // On OS X it's common to re-create a window in the app when the
+  // dock icon is clicked and there are no other windows open.
+  if (isAppShuttingDown()) return;
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
+
+// In this file you can include the rest of your app's specific main process
+// code. You can also put them in separate files and import them here.

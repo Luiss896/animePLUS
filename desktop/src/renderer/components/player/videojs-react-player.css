@@ -1,0 +1,69 @@
+.oa-videojs-player.media-default-skin {
+  --media-border-radius: 1.25rem;
+  overflow: visible;
+}
+
+.oa-videojs-player.media-default-skin .media-controls,
+.oa-videojs-player .media-controls {
+  border-radius: 1.125rem;
+  padding-right: 0.875rem;
+  overflow: visible;
+}
+
+.oa-videojs-player.media-default-skin .media-button,
+.oa-videojs-player .media-button {
+  border-radius: 0.75rem;
+}
+
+.oa-videojs-player video {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/*
+ * Disable the skin's darkening scrim.
+ *
+ * @videojs's video preset renders a `.media-overlay` element whose only job is to
+ * darken the picture whenever the controls become visible:
+ *
+ *   .media-controls[data-visible] ~ .media-overlay { opacity: 1 }
+ *
+ * with a black linear-gradient. The effect is that merely moving the mouse dims
+ * the video, which is unwanted here — the picture should not change at all when
+ * the controls appear. The overlay is removed rather than made transparent so it
+ * cannot contribute a stacking layer or a backdrop-filter either.
+ */
+.oa-videojs-player .media-overlay {
+  display: none !important;
+}
+
+/*
+ * Anime4K WebGPU output. Sits directly above the <video> it visually replaces.
+ *
+ * Size and offset are set from JavaScript to the video's letterboxed box, so the
+ * canvas is deliberately NOT stretched with inset-0/h-full/w-full: stretching it
+ * would make the browser rescale the rendered frame a second time whenever the
+ * container aspect ratio differs from the video's (fullscreen on a non-matching
+ * monitor), which throws away the 1440p pipeline work.
+ *
+ * Z-INDEX: the @videojs skin puts `.media-controls` at z-index 10, and the
+ * canvas is appended as the LAST child of the container. With an equal z-index
+ * the later sibling wins, so the canvas painted its black background straight
+ * over the progress bar and the buttons — they stayed clickable (the canvas is
+ * pointer-events: none) but were invisible. Stick to z-index 1: above the <video>
+ * (auto/0) and unambiguously below the controls (10), whatever the DOM order.
+ */
+.oa-shader-canvas {
+  z-index: 1;
+  pointer-events: none;
+  background: #000;
+  /* Match the player's rounded corners so the canvas never paints a square
+     black edge over the skin's rounding. */
+  border-radius: inherit;
+  /* The backing store is the pipeline's output resolution; the browser maps it
+     onto the CSS box. Keep the default filter so a mild downscale stays clean. */
+  image-rendering: auto;
+}
