@@ -38,16 +38,23 @@ export function useUpcomingSeasons(): UseUpcomingSeasonsResult {
 
     const run = async () => {
       // Best-effort: never let a failure here break the page.
+      let addedSomething = false;
       try {
         const auto = await window.anilist.runAutoAddSequels();
         if (!cancelled && auto.enabled) setAutoAdd(auto);
+        // If the pass changed the list, the cached seasons are stale: they were
+        // computed before the new entries existed, so the page would otherwise
+        // report "added N seasons" while still rendering the old, shorter list.
+        addedSomething = auto.enabled && auto.added.length > 0;
       } catch {
         /* auto-add is optional; ignore and continue */
       }
 
       try {
-        // A refresh (token > 0) bypasses the main-process cache.
-        const value = await window.anilist.getUpcomingSeasons(reloadToken > 0);
+        // Bypass the cache on an explicit refresh, and whenever the auto-add
+        // pass just modified the list.
+        const force = reloadToken > 0 || addedSomething;
+        const value = await window.anilist.getUpcomingSeasons(force);
         if (!cancelled) setResult(value);
       } catch (error: unknown) {
         if (cancelled) return;
