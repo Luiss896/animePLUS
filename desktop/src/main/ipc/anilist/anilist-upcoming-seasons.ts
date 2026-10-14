@@ -31,10 +31,18 @@ import { getAniListViewerId, postAniListAuthedGraphql } from "./anilist-authed-a
  *    array, not an error, so "no upcoming seasons" is a state and not a failure.
  */
 
-/** How many list entries are inspected. Keeps the query bounded and quick. */
-const MAX_SOURCE_SHOWS = 50;
+/**
+ * Maximum list entries inspected, across all pages.
+ *
+ * This used to be a single fixed page of 50 with no indication when the list was
+ * longer, which silently dropped entries: a user with 54 shows had whichever 4
+ * fell outside the first page vanish from the page entirely — including shows
+ * already on their list and airing right now. The list is now paginated up to
+ * this ceiling, and hitting it is reported rather than hidden.
+ */
+const MAX_SOURCE_SHOWS = 300;
 
-/** AniList page size ceiling for the media page. */
+/** AniList page size ceiling for both the list and the media queries. */
 const MEDIA_PAGE_SIZE = 50;
 
 /** Cache lifetime. Seasons change rarely; the list changes more often. */
@@ -49,8 +57,9 @@ const MAX_SEQUEL_HOPS = 2;
  * strings so the request count never depends on list size.
  */
 const LIST_QUERY = `
-  query ($userId: Int, $perPage: Int) {
-    Page(page: 1, perPage: $perPage) {
+  query ($userId: Int, $page: Int, $perPage: Int) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo { total currentPage lastPage hasNextPage }
       mediaList(userId: $userId, type: ANIME, sort: UPDATED_TIME_DESC) {
         id
         status
@@ -371,15 +380,40 @@ export async function fetchUpcomingSeasons(
   try {
     const userId = await getAniListViewerId();
 
-    const listData = await postAniListAuthedGraphql<{
-      Page?: { mediaList?: (RawListEntry | null)[] | null } | null;
-    }>(LIST_QUERY, { userId, perPage: MAX_SOURCE_SHOWS });
+    // Paginate the whole list, not just the first page. A single page silently
+    // truncates: with 54 entries a fixed perPage of 50 dropped 4 of them, and
+    // whichever shows fell outside the window disappeared from this page even
+    // though they were on the user's list and airing.
+    const allEntries: RawListEntry[] = [];
+    let page = 1;
+    let truncated = false;
+
+    for (;;) {
+      const listData = await postAniListAuthedGraphql<{
+        Page?: {
+          pageInfo?: { hasNextPage?: boolean | null; lastPage?: number | null } | null;
+          mediaList?: (RawListEntry | null)[] | null;
+        } | null;
+      }>(LIST_QUERY, { userId, page, perPage: MEDIA_PAGE_SIZE });
+
+      for (const entry of listData.Page?.mediaList ?? []) {
+        if (entry) allEntries.push(entry);
+      }
+
+      const info = listData.Page?.pageInfo;
+      if (!info?.hasNextPage) break;
+      if (allEntries.length >= MAX_SOURCE_SHOWS) {
+        truncated = true;
+        break;
+      }
+      page += 1;
+    }
 
     // Build the source set: only entries with a usable media id, de-duplicated
     // by media id (a show can appear in both a status list and a custom list).
     const sources = new Map<number, UpcomingSeasonSource>();
-    for (const entry of listData.Page?.mediaList ?? []) {
-      const media = entry?.media;
+    for (const entry of allEntries) {
+      const media = entry.media;
       if (!media || !isPositiveInt(media.id)) continue;
       if (sources.has(media.id)) continue;
 
@@ -387,15 +421,15 @@ export async function fetchUpcomingSeasons(
         mediaId: media.id,
         title: pickTitle(media.title),
         coverImage: pickCover(media.coverImage),
-        listStatus: entry?.status ?? "CURRENT",
-        progress: entry?.progress ?? 0,
+        listStatus: entry.status ?? "CURRENT",
+        progress: entry.progress ?? 0,
         totalEpisodes: media.episodes ?? null,
       });
     }
 
     // Currently airing shows come from the list response itself — no extra
     // request, since `nextAiringEpisode` is already part of LIST_QUERY.
-    const airing = collectAiringShows(listData.Page?.mediaList ?? []);
+    const airing = collectAiringShows(allEntries);
 
     if (sources.size === 0) {
       return remember({ status: "empty", fetchedAt: Date.now() });
@@ -431,7 +465,7 @@ export async function fetchUpcomingSeasons(
 
     seasons.sort((a, b) => seasonSortKey(a) - seasonSortKey(b));
 
-    return remember({ status: "ok", seasons, airing, fetchedAt: Date.now() });
+    return remember({ status: "ok", seasons, airing, fetchedAt: Date.now(), truncated });
   } catch (error) {
     if (error instanceof AniListRateLimitError) {
       return { status: "rate-limited", retryAfterSeconds: error.retryAfterSeconds };

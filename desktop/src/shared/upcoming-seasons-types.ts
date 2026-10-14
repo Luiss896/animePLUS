@@ -90,6 +90,8 @@ export type UpcomingSeasonsResult =
       seasons: UpcomingSeason[];
       /** Shows airing right now (grouped by weekday in the Ongoing section). */
       airing: AiringShow[];
+      /** True when the list was longer than the scan ceiling, so some shows were not inspected. */
+      truncated: boolean;
       fetchedAt: number;
     }
   /** AniList is not connected, so there is no list to read. */
