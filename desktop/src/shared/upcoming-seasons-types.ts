@@ -42,11 +42,59 @@ export interface UpcomingSeason {
   source: UpcomingSeasonSource;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Currently airing                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A show on the user's list that is airing right now.
+ *
+ * Distinct from `UpcomingSeason`: these are already running, so the useful
+ * information is the next episode and *when* it drops, not a premiere date.
+ * The timing comes from `Media.nextAiringEpisode`, which AniList populates only
+ * for RELEASING media — verified: 48 of 50 currently-airing shows returned a
+ * concrete airing timestamp.
+ */
+export interface AiringShow {
+  mediaId: number;
+  title: string;
+  coverImage: string | null;
+  /** Next episode number, or null when AniList has no schedule for it. */
+  nextEpisode: number | null;
+  /** Epoch milliseconds of the next airing, in absolute UTC terms. */
+  airingAtMs: number | null;
+  /**
+   * Local weekday index (0 = Sunday … 6 = Saturday) derived from `airingAtMs`
+   * in the *user's* timezone, so the grouping matches what they experience.
+   */
+  weekdayIndex: number | null;
+  /** Seconds until the next episode, as reported by AniList. */
+  timeUntilAiring: number | null;
+  /** Total episodes, when known. */
+  totalEpisodes: number | null;
+  /** The user's progress on this show. */
+  progress: number;
+  /** The user's list status, e.g. CURRENT or REPEATING. */
+  listStatus: string;
+  /**
+   * True when the show is on the user's list as CURRENT/REPEATING. Shows that
+   * are simply airing but only "planned" are marked false and shown de-emphasised.
+   */
+  isBeingWatched: boolean;
+}
+
 export type UpcomingSeasonsResult =
-  | { status: "ok"; seasons: UpcomingSeason[]; fetchedAt: number }
+  | {
+      status: "ok";
+      /** Future, not-yet-aired seasons (grouped in the Upcoming section). */
+      seasons: UpcomingSeason[];
+      /** Shows airing right now (grouped by weekday in the Ongoing section). */
+      airing: AiringShow[];
+      fetchedAt: number;
+    }
   /** AniList is not connected, so there is no list to read. */
   | { status: "not-connected" }
-  /** Connected, but the list has no show with a known upcoming season. */
+  /** Connected, but nothing is airing and no future season is announced. */
   | { status: "empty"; fetchedAt: number }
   /** Throttled by AniList; `retryAfterSeconds` says when to try again. */
   | { status: "rate-limited"; retryAfterSeconds: number }

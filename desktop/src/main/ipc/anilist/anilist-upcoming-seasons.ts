@@ -1,4 +1,5 @@
 import type {
+  AiringShow,
   UpcomingSeason,
   UpcomingSeasonsResult,
   UpcomingSeasonSource,
@@ -59,6 +60,8 @@ const LIST_QUERY = `
           title { english romaji userPreferred }
           coverImage { large extraLarge }
           episodes
+          status
+          nextAiringEpisode { episode airingAt timeUntilAiring }
         }
       }
     }
@@ -140,6 +143,12 @@ interface RawRelationEdge {
   node?: RawRelatedNode | null;
 }
 
+interface RawAiringSchedule {
+  episode?: number | null;
+  airingAt?: number | null;
+  timeUntilAiring?: number | null;
+}
+
 interface RawListEntry {
   id?: number | null;
   status?: string | null;
@@ -149,6 +158,8 @@ interface RawListEntry {
     title?: RawTitle | null;
     coverImage?: RawCover | null;
     episodes?: number | null;
+    status?: string | null;
+    nextAiringEpisode?: RawAiringSchedule | null;
   } | null;
 }
 
@@ -274,6 +285,56 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+/**
+ * Build the currently-airing list from the user's own list entries.
+ *
+ * A show qualifies when AniList reports RELEASING status *and* supplies a
+ * `nextAiringEpisode`: the status alone is not enough, because a long-running
+ * show can be RELEASING with no schedule attached, and such an entry carries no
+ * actionable information for a "when does the next episode drop" view.
+ *
+ * The weekday is computed here, in the main process, so it reflects the machine's
+ * local timezone rather than whatever the renderer guesses. `getDay()` returns
+ * 0 = Sunday, matching the grouping used by the UI.
+ */
+function collectAiringShows(entries: (RawListEntry | null)[] | null | undefined): AiringShow[] {
+  const shows: AiringShow[] = [];
+  const seen = new Set<number>();
+
+  for (const entry of entries ?? []) {
+    const media = entry?.media;
+    if (!media || !isPositiveInt(media.id)) continue;
+    if (seen.has(media.id)) continue;
+
+    const schedule = media.nextAiringEpisode;
+    if (media.status !== "RELEASING") continue;
+    if (!schedule || typeof schedule.airingAt !== "number") continue;
+
+    seen.add(media.id);
+
+    const airingAtMs = schedule.airingAt * 1000;
+    const airingDate = new Date(airingAtMs);
+
+    shows.push({
+      mediaId: media.id,
+      title: pickTitle(media.title),
+      coverImage: pickCover(media.coverImage),
+      nextEpisode: schedule.episode ?? null,
+      airingAtMs,
+      weekdayIndex: Number.isNaN(airingDate.getTime()) ? null : airingDate.getDay(),
+      timeUntilAiring: schedule.timeUntilAiring ?? null,
+      totalEpisodes: media.episodes ?? null,
+      progress: entry?.progress ?? 0,
+      listStatus: entry?.status ?? "CURRENT",
+      isBeingWatched: entry?.status === "CURRENT" || entry?.status === "REPEATING",
+    });
+  }
+
+  // Soonest first within each day, and undated last.
+  shows.sort((a, b) => (a.airingAtMs ?? Infinity) - (b.airingAtMs ?? Infinity));
+  return shows;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public entry point                                                         */
 /* -------------------------------------------------------------------------- */
@@ -332,6 +393,10 @@ export async function fetchUpcomingSeasons(
       });
     }
 
+    // Currently airing shows come from the list response itself — no extra
+    // request, since `nextAiringEpisode` is already part of LIST_QUERY.
+    const airing = collectAiringShows(listData.Page?.mediaList ?? []);
+
     if (sources.size === 0) {
       return remember({ status: "empty", fetchedAt: Date.now() });
     }
@@ -359,13 +424,14 @@ export async function fetchUpcomingSeasons(
       }
     }
 
-    if (seasons.length === 0) {
+    // Nothing airing and nothing announced is a legitimate empty state.
+    if (seasons.length === 0 && airing.length === 0) {
       return remember({ status: "empty", fetchedAt: Date.now() });
     }
 
     seasons.sort((a, b) => seasonSortKey(a) - seasonSortKey(b));
 
-    return remember({ status: "ok", seasons, fetchedAt: Date.now() });
+    return remember({ status: "ok", seasons, airing, fetchedAt: Date.now() });
   } catch (error) {
     if (error instanceof AniListRateLimitError) {
       return { status: "rate-limited", retryAfterSeconds: error.retryAfterSeconds };
