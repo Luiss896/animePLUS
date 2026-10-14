@@ -15,7 +15,13 @@ export default function SidebarLayout() {
     <SidebarProvider open={false}>
       <Titlebar className="border-border border-b" />
       <AppSidebar />
-      <SidebarInset className="pt-12 overflow-x-hidden flex flex-col h-screen overflow-hidden">
+      {/*
+        The inset must stay transparent, not `bg-background`. The ambient palette
+        wash is painted on `body::before`; an opaque fill here (which is what the
+        sidebar primitive ships with) sat on top of it and cancelled the effect,
+        so every palette looked like the same flat black.
+      */}
+      <SidebarInset className="bg-transparent pt-12 overflow-x-hidden flex flex-col h-screen overflow-hidden">
         <main
           className={cn(
             "flex-1 min-h-0",

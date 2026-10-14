@@ -1,22 +1,48 @@
 <svg width="868" height="868" viewBox="0 0 868 868" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g filter="url(#filter0_d_1_3)">
-<path d="M662 11H206C104.38 11 22 93.3796 22 195V651C22 752.62 104.38 835 206 835H662C763.62 835 846 752.62 846 651V195C846 93.3796 763.62 11 662 11Z" fill="black"/>
-<path d="M662 11H206C104.38 11 22 93.3796 22 195V651C22 752.62 104.38 835 206 835H662C763.62 835 846 752.62 846 651V195C846 93.3796 763.62 11 662 11Z" fill="url(#paint0_linear_1_3)"/>
-<path d="M400.333 257.941C419.078 239.196 449.47 239.196 468.215 257.941L616.753 406.479C640.941 430.666 640.941 469.882 616.753 494.069V494.069C515.973 594.85 352.575 594.85 251.795 494.069V494.069C227.608 469.882 227.608 430.666 251.795 406.479L400.333 257.941Z" fill="white"/>
-</g>
-<defs>
-<filter id="filter0_d_1_3" x="0" y="0" width="868" height="868" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix"/>
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-<feOffset dy="11"/>
-<feGaussianBlur stdDeviation="11"/>
-<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.28 0"/>
-<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_3"/>
-<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_3" result="shape"/>
-</filter>
-<linearGradient id="paint0_linear_1_3" x1="434" y1="11" x2="434" y2="835" gradientUnits="userSpaceOnUse">
-<stop stop-opacity="0"/>
-<stop offset="1" stop-opacity="0.2"/>
-</linearGradient>
-</defs>
+  <!--
+    animePLUS mark: a retro soda bottle.
+
+    Deliberately generic. The app is themed around Steins;Gate, whose protagonist
+    is associated with a well-known brand of soda, but that brand and its trade
+    dress are registered trademarks: reproducing its label, wordmark or bottle
+    silhouette would be a trademark issue for a distributed app. This is an
+    original, era-appropriate bottle with no branding of any kind.
+
+    Drawn as one bold silhouette because that is what survives the ~20px the
+    titlebar renders it at. An earlier detailed version (cap, shoulder, label
+    band, bubbles) turned into an unreadable smudge at that size.
+  -->
+  <defs>
+    <linearGradient id="oaTile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-opacity="0" />
+      <stop offset="1" stop-opacity="0.22" />
+    </linearGradient>
+    <filter id="oaShadow" x="0" y="0" width="868" height="868" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="bg" />
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard" />
+      <feOffset dy="11" />
+      <feGaussianBlur stdDeviation="11" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.28 0" />
+      <feBlend mode="normal" in2="bg" result="shadow" />
+      <feBlend mode="normal" in="SourceGraphic" in2="shadow" result="shape" />
+    </filter>
+  </defs>
+
+  <g filter="url(#oaShadow)">
+    <!-- Rounded square plate -->
+    <path d="M662 11H206C104.38 11 22 93.38 22 195V651C22 752.62 104.38 835 206 835H662C763.62 835 846 752.62 846 651V195C846 93.38 763.62 11 662 11Z" fill="black" />
+    <path d="M662 11H206C104.38 11 22 93.38 22 195V651C22 752.62 104.38 835 206 835H662C763.62 835 846 752.62 846 651V195C846 93.38 763.62 11 662 11Z" fill="url(#oaTile)" />
+
+    <!-- Crown cap (wider than the neck, reads as a bottle even when tiny) -->
+    <rect x="384" y="140" width="100" height="56" rx="10" fill="#ffffff" />
+
+    <!-- Body: slim neck flaring into a wide base, one continuous silhouette -->
+    <path
+      d="M406 196h56v70c0 30 4 52 14 70 22 38 32 78 32 122v146c0 34-28 62-62 62H410c-34 0-62-28-62-62V458c0-44 10-84 32-122 10-18 14-40 14-70v-70h12z"
+      fill="#ffffff"
+    />
+
+    <!-- Liquid: a solid block inside the body, leaving a white rim all round -->
+    <rect x="378" y="500" width="112" height="150" rx="16" fill="#0b0b12" />
+  </g>
 </svg>

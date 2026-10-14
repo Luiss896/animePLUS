@@ -111,117 +111,127 @@
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Steins;Gate — electric blue + amber on a deep lab black                */
+  /* Steins;Gate — indigo + amber, sampled from the official key art        */
   /* ---------------------------------------------------------------------- */
+  /*
+   * Colours below were extracted from the real cover and banner rather than
+   * guessed. The dominant hue of the key art is indigo 238 (the Tokyo skyline
+   * at dusk) with warm sepia 38 accents and the crimson of Kurisu's tie.
+   */
   .dark[data-palette="steinsgate"] {
-    --background: 217 47% 5%;
-    --foreground: 210 40% 96%;
-    --card: 217 42% 8%;
-    --card-foreground: 210 40% 96%;
-    --popover: 217 45% 7%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 212 100% 59%;
-    --primary-foreground: 217 47% 5%;
-    --secondary: 217 33% 14%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 13%;
-    --muted-foreground: 212 22% 68%;
-    --accent: 217 38% 16%;
-    --accent-foreground: 210 40% 98%;
-    --border: 214 32% 18%;
-    --input: 214 32% 18%;
-    --ring: 212 100% 59%;
-    --sidebar-background: 217 45% 6%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-primary: 212 100% 59%;
-    --sidebar-primary-foreground: 217 47% 5%;
-    --sidebar-accent: 217 38% 14%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 214 32% 16%;
-    --sidebar-ring: 212 100% 59%;
-    --accent-solid: 212 100% 59%;
-    --accent-solid-foreground: 217 47% 5%;
-    --accent-soft: 212 60% 18%;
-    --accent-glow: 212 100% 59%;
-    /* Amber reads as the "divergence" highlight across the UI. */
-    --highlight: 35 100% 58%;
-    --highlight-foreground: 217 47% 5%;
+    /* Deep indigo night, clearly tinted rather than plain black. */
+    --background: 238 40% 8%;
+    --foreground: 230 25% 96%;
+    --card: 238 34% 12%;
+    --card-foreground: 230 25% 96%;
+    --popover: 238 36% 10%;
+    --popover-foreground: 230 25% 96%;
+    --primary: 238 72% 64%;
+    --primary-foreground: 238 45% 8%;
+    --secondary: 238 26% 18%;
+    --secondary-foreground: 230 25% 96%;
+    --muted: 238 26% 16%;
+    --muted-foreground: 235 18% 70%;
+    --accent: 238 30% 21%;
+    --accent-foreground: 230 25% 98%;
+    --border: 238 24% 24%;
+    --input: 238 24% 24%;
+    --ring: 238 72% 64%;
+    --sidebar-background: 238 38% 9%;
+    --sidebar-foreground: 230 25% 96%;
+    --sidebar-primary: 238 72% 64%;
+    --sidebar-primary-foreground: 238 45% 8%;
+    --sidebar-accent: 238 30% 18%;
+    --sidebar-accent-foreground: 230 25% 98%;
+    --sidebar-border: 238 24% 20%;
+    --sidebar-ring: 238 72% 64%;
+    --accent-solid: 238 72% 64%;
+    --accent-solid-foreground: 238 45% 8%;
+    --accent-soft: 238 40% 24%;
+    --accent-glow: 238 78% 70%;
+    /* Sepia 38 is the second signature tone of the art. */
+    --highlight: 38 85% 66%;
+    --highlight-foreground: 238 45% 8%;
+    /* Crimson, for divergence-style emphasis. */
+    --danger-accent: 352 68% 48%;
   }
 
   /* ---------------------------------------------------------------------- */
   /* Frieren — forest emerald + soft gold, warm and low-contrast            */
   /* ---------------------------------------------------------------------- */
   .dark[data-palette="frieren"] {
-    --background: 160 40% 4%;
+    /* Lifted well off black so the palette is actually visible. */
+    --background: 165 32% 8%;
     --foreground: 150 20% 95%;
-    --card: 160 32% 7%;
+    --card: 165 26% 12%;
     --card-foreground: 150 20% 95%;
-    --popover: 160 35% 6%;
+    --popover: 165 28% 10%;
     --popover-foreground: 150 20% 95%;
-    --primary: 158 64% 52%;
-    --primary-foreground: 160 40% 4%;
-    --secondary: 160 22% 13%;
+    --primary: 158 60% 54%;
+    --primary-foreground: 165 40% 8%;
+    --secondary: 165 18% 18%;
     --secondary-foreground: 150 20% 95%;
-    --muted: 160 22% 12%;
-    --muted-foreground: 155 15% 66%;
-    --accent: 160 26% 15%;
+    --muted: 165 18% 16%;
+    --muted-foreground: 155 14% 70%;
+    --accent: 165 22% 21%;
     --accent-foreground: 150 20% 97%;
-    --border: 158 18% 17%;
-    --input: 158 18% 17%;
-    --ring: 158 64% 52%;
-    --sidebar-background: 160 38% 5%;
+    --border: 160 16% 24%;
+    --input: 160 16% 24%;
+    --ring: 158 60% 54%;
+    --sidebar-background: 165 30% 9%;
     --sidebar-foreground: 150 20% 95%;
-    --sidebar-primary: 158 64% 52%;
-    --sidebar-primary-foreground: 160 40% 4%;
-    --sidebar-accent: 160 26% 13%;
+    --sidebar-primary: 158 60% 54%;
+    --sidebar-primary-foreground: 165 40% 8%;
+    --sidebar-accent: 165 22% 18%;
     --sidebar-accent-foreground: 150 20% 97%;
-    --sidebar-border: 158 18% 15%;
-    --sidebar-ring: 158 64% 52%;
-    --accent-solid: 158 64% 52%;
-    --accent-solid-foreground: 160 40% 4%;
-    --accent-soft: 158 35% 16%;
-    --accent-glow: 158 64% 52%;
-    --highlight: 44 70% 66%;
-    --highlight-foreground: 160 40% 4%;
+    --sidebar-border: 160 16% 20%;
+    --sidebar-ring: 158 60% 54%;
+    --accent-solid: 158 60% 54%;
+    --accent-solid-foreground: 165 40% 8%;
+    --accent-soft: 158 32% 22%;
+    --accent-glow: 158 62% 62%;
+    --highlight: 44 72% 68%;
+    --highlight-foreground: 165 40% 8%;
   }
 
   /* ---------------------------------------------------------------------- */
   /* Edgerunners — neon yellow + cyan over Night City black                 */
   /* ---------------------------------------------------------------------- */
   .dark[data-palette="cyberpunk"] {
-    --background: 60 25% 3%;
+    /* Deep blue-black rather than pure black; Night City is blue at night. */
+    --background: 220 30% 8%;
     --foreground: 60 15% 94%;
-    --card: 60 20% 6%;
+    --card: 220 24% 12%;
     --card-foreground: 60 15% 94%;
-    --popover: 60 22% 5%;
+    --popover: 220 26% 10%;
     --popover-foreground: 60 15% 94%;
     /* The signature Cyberpunk yellow. */
-    --primary: 57 94% 52%;
-    --primary-foreground: 60 25% 3%;
-    --secondary: 60 14% 12%;
+    --primary: 57 92% 54%;
+    --primary-foreground: 220 30% 8%;
+    --secondary: 220 18% 17%;
     --secondary-foreground: 60 15% 94%;
-    --muted: 60 14% 11%;
-    --muted-foreground: 60 10% 65%;
-    --accent: 60 16% 14%;
+    --muted: 220 18% 15%;
+    --muted-foreground: 60 10% 68%;
+    --accent: 220 20% 20%;
     --accent-foreground: 60 15% 97%;
-    --border: 60 12% 17%;
-    --input: 60 12% 17%;
-    --ring: 57 94% 52%;
-    --sidebar-background: 60 24% 4%;
+    --border: 220 16% 24%;
+    --input: 220 16% 24%;
+    --ring: 57 92% 54%;
+    --sidebar-background: 220 28% 9%;
     --sidebar-foreground: 60 15% 94%;
-    --sidebar-primary: 57 94% 52%;
-    --sidebar-primary-foreground: 60 25% 3%;
-    --sidebar-accent: 60 16% 12%;
+    --sidebar-primary: 57 92% 54%;
+    --sidebar-primary-foreground: 220 30% 8%;
+    --sidebar-accent: 220 20% 17%;
     --sidebar-accent-foreground: 60 15% 97%;
-    --sidebar-border: 60 12% 15%;
-    --sidebar-ring: 57 94% 52%;
-    --accent-solid: 57 94% 52%;
-    --accent-solid-foreground: 60 25% 3%;
-    --accent-soft: 57 50% 15%;
-    --accent-glow: 57 94% 52%;
+    --sidebar-border: 220 16% 20%;
+    --sidebar-ring: 57 92% 54%;
+    --accent-solid: 57 92% 54%;
+    --accent-solid-foreground: 220 30% 8%;
+    --accent-soft: 57 45% 20%;
+    --accent-glow: 57 94% 58%;
     /* Cyan as the secondary neon. */
-    --highlight: 187 100% 50%;
-    --highlight-foreground: 60 25% 3%;
+    --highlight: 187 92% 52%;
+    --highlight-foreground: 220 30% 8%;
   }
 
   /* Accent scale fallback for palettes that define no --highlight. */
@@ -258,6 +268,46 @@
     scrollbar-gutter: stable;
     user-select: none;
     overflow: hidden;
+  }
+
+  /*
+   * Ambient background wash.
+   *
+   * A flat fill made every palette look identical — the hue changed but at 8%
+   * lightness the eye reads it as black, so only borders and buttons seemed to
+   * react. This paints two large, very soft radial gradients tinted by the
+   * palette's own accent and highlight over the base colour, which gives each
+   * theme a visible atmosphere without reducing text contrast or competing with
+   * content. Fixed positioning keeps it from scrolling with the page.
+   */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        110rem 70rem at 12% -12%,
+        hsl(var(--accent-glow) / 0.3),
+        transparent 62%
+      ),
+      radial-gradient(
+        90rem 60rem at 92% 8%,
+        hsl(var(--highlight) / 0.18),
+        transparent 58%
+      ),
+      radial-gradient(
+        120rem 80rem at 50% 118%,
+        hsl(var(--accent-solid) / 0.16),
+        transparent 66%
+      );
+  }
+
+  /* Keep the app above the wash. */
+  #app {
+    position: relative;
+    z-index: 1;
   }
 
   .scrollbar-none {

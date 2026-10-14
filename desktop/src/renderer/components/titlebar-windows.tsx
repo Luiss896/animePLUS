@@ -28,7 +28,7 @@ export function WindowsTitlebar({
   }, []);
 
   return (
-    <div className={cn("flex w-screen min-h-12 fixed z-10 bg-background draglayer", className)}>
+    <div className={cn("flex w-screen min-h-12 fixed z-10 bg-background/75 backdrop-blur-xl draglayer", className)}>
       <div className="flex items-center px-2 w-full">
         <Button
           type="button"

@@ -19,7 +19,7 @@ export function MacTitlebar({
   const navigate = useNavigate();
 
   return (
-    <div className={cn("flex w-screen min-h-12 fixed z-10 bg-background draglayer", className)}>
+    <div className={cn("flex w-screen min-h-12 fixed z-10 bg-background/75 backdrop-blur-xl draglayer", className)}>
       <div className="flex items-center gap-2 px-4 pl-20 w-full">
         <Button
           type="button"

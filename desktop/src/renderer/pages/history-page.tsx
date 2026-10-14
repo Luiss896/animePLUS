@@ -1,8 +1,9 @@
-import { MoreHorizontal } from "lucide-react";
+﻿import { MoreHorizontal } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/renderer/components/ui/badge";
+import { PageHeader } from "@/renderer/components/page-header";
 import { Button } from "@/renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -43,7 +44,7 @@ function progressBadgeLabel(entry: HistoryEntry): string {
   if (cur > 0) {
     return formatDurationMs(cur);
   }
-  return "—";
+  return "â€”";
 }
 
 function isWatchCompleted(entry: HistoryEntry): boolean {
@@ -276,9 +277,9 @@ export function HistoryPage() {
   const stats = useMemo(() => computeHistoryStats(entries), [entries]);
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
+    <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
       {disabledProviderDialog}
-      <h1 className="text-4xl font-semibold tracking-tight">History</h1>
+      <PageHeader title="History" description="Everything you have watched, most recent first." />
 
       {loading ? <HistoryStatsSkeleton /> : <HistoryStatsRow stats={stats} />}
 

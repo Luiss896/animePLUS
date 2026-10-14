@@ -1,10 +1,11 @@
-import { Heart, List } from "lucide-react";
+﻿import { Heart, List } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAniListConnectDialog } from "@/renderer/components/anilist-connect-dialog";
 import { SHOW_GRID_CLASS, ShowGrid } from "@/renderer/components/show-grid";
 import { Badge } from "@/renderer/components/ui/badge";
+import { PageHeader } from "@/renderer/components/page-header";
 import { Button } from "@/renderer/components/ui/button";
 import { Skeleton } from "@/renderer/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
@@ -194,10 +195,12 @@ export function BookmarksPage() {
   const isEmpty = !loading && activeItems.length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] p-6 md:p-8">
-      <div className="mb-6 flex flex-col gap-1">
-        <h1 className="text-4xl font-semibold tracking-tight">Bookmarks</h1>
-      </div>
+    <div className="oa-page-enter mx-auto w-full max-w-[1600px] p-6 md:p-8">
+      <PageHeader
+        title="Bookmarks"
+        description="Shows you saved to watch later."
+        className="mb-6"
+      />
 
       <Tabs
         value={activeTab}
@@ -229,7 +232,7 @@ export function BookmarksPage() {
         )}
 
         {navigatingId != null && (
-          <p className="mb-4 text-sm text-muted-foreground">Finding stream source…</p>
+          <p className="mb-4 text-sm text-muted-foreground">Finding stream sourceâ€¦</p>
         )}
 
         <TabsContent value={activeTab} className="mt-0">

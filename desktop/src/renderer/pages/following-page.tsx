@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Card } from "@/renderer/components/ui/card";
+import { PageHeader } from "@/renderer/components/page-header";
 import { useUpcomingSeasons } from "@/renderer/hooks/use-upcoming-seasons";
 import type {
   AiringShow,
@@ -289,26 +290,26 @@ export function FollowingPage() {
 
   return (
     <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-8 p-6 md:p-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-4xl font-semibold tracking-tight">Following</h1>
-          <p className="text-sm text-muted-foreground">
-            What is airing now and what is coming next, from your AniList list.
-          </p>
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={refresh}
-          disabled={loading}
-          className="shrink-0"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Following"
+        description="What is airing now and what is coming next, from your AniList list."
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+        }
+      />
 
       {loading && !result ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

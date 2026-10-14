@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 
 import { AniListConnectDialog } from "@/renderer/components/anilist-connect-dialog";
 import { PalettePicker } from "@/renderer/components/palette-picker";
 import { ThemePicker } from "@/renderer/components/theme-picker";
 import { Button } from "@/renderer/components/ui/button";
+import { PageHeader } from "@/renderer/components/page-header";
 import { Card } from "@/renderer/components/ui/card";
 import {
   Select,
@@ -247,7 +248,10 @@ export function SettingsPage() {
 
   return (
     <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
-      <h1 className="text-4xl font-semibold tracking-tight">Settings</h1>
+      <PageHeader
+        title="Settings"
+        description="Account, playback and appearance."
+      />
 
       <Card as="section" className="p-5 flex flex-col gap-4">
         <div className="space-y-1 min-w-0">
@@ -261,11 +265,11 @@ export function SettingsPage() {
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm sm:max-w-md">
             <dt className="text-muted-foreground">Current</dt>
             <dd className="font-mono tabular-nums">
-              {updateLoading ? "â€¦" : (updateCheck?.currentVersion ?? "â€”")}
+              {updateLoading ? "Ã¢â‚¬Â¦" : (updateCheck?.currentVersion ?? "Ã¢â‚¬â€")}
             </dd>
             <dt className="text-muted-foreground">Latest</dt>
             <dd className="font-mono tabular-nums">
-              {updateLoading ? "â€¦" : (updateCheck?.latestVersion ?? "â€”")}
+              {updateLoading ? "Ã¢â‚¬Â¦" : (updateCheck?.latestVersion ?? "Ã¢â‚¬â€")}
             </dd>
           </dl>
 
@@ -304,7 +308,7 @@ export function SettingsPage() {
             )}
             <p className="text-sm text-muted-foreground">
               {anilistStatusLoading
-                ? "â€¦"
+                ? "Ã¢â‚¬Â¦"
                 : anilistStatus?.connected && anilistStatus.username
                   ? `Signed in as ${anilistStatus.username}.`
                   : "Not connected."}
@@ -335,7 +339,7 @@ export function SettingsPage() {
                   void onAnilistDisconnect();
                 }}
               >
-                {anilistDisconnectBusy ? "Disconnectingâ€¦" : "Disconnect"}
+                {anilistDisconnectBusy ? "DisconnectingÃ¢â‚¬Â¦" : "Disconnect"}
               </Button>
             </div>
           </div>
@@ -481,7 +485,7 @@ export function SettingsPage() {
             void onOpenLogsDirectory();
           }}
         >
-          {openLogsBusy ? "Openingâ€¦" : "Open"}
+          {openLogsBusy ? "OpeningÃ¢â‚¬Â¦" : "Open"}
         </Button>
       </Card>
     </div>

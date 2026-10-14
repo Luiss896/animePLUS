@@ -1,4 +1,4 @@
-import { BrowserWindow, app, nativeTheme } from "electron";
+﻿import { BrowserWindow, app, nativeTheme } from "electron";
 // @ts-expect-error no types
 import started from "electron-squirrel-startup";
 import path from "path";

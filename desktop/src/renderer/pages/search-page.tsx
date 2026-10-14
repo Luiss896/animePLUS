@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowUpDown,
   BarChart3,
   Calendar,
@@ -14,6 +14,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { SHOW_GRID_CLASS, ShowGrid } from "@/renderer/components/show-grid";
 import { Button } from "@/renderer/components/ui/button";
+import { PageHeader } from "@/renderer/components/page-header";
 import { Input } from "@/renderer/components/ui/input";
 import {
   Select,
@@ -208,8 +209,8 @@ export function SearchPage() {
   }, [filterDefs.length]);
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
-      <h1 className="text-4xl font-semibold tracking-tight">Search</h1>
+    <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
+      <PageHeader title="Search" description="Find a series by title, then filter the results." />
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-col xl:flex-row gap-2 xl:items-center xl:gap-3">
@@ -289,7 +290,7 @@ export function SearchPage() {
             rating: show.score,
             coverUrl: show.thumbnail,
             title: displayTitle(show),
-            subtitle: `Episode ${show.availableEpisodes?.sub ?? 0} · ${getAvailabilityLabel(show)}`,
+            subtitle: `Episode ${show.availableEpisodes?.sub ?? 0} Â· ${getAvailabilityLabel(show)}`,
             badges: showAvailabilityBadges(show),
             onClick: () => openShow(show),
           }))}
