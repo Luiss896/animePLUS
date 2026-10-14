@@ -77,6 +77,15 @@ interface Episode {
   thumbnail: string | null;
   index: number;
   mode: StreamMode;
+  /**
+   * Name of the series this episode belongs to.
+   *
+   * Kept separate from `title` because the history entry already stores the
+   * *show* name in `title`, so a card showing only `title` could not distinguish
+   * "which series" from "which episode". Optional: entries written before this
+   * field existed simply lack it.
+   */
+  showName?: string;
 }
 
 interface StreamQualityOption {

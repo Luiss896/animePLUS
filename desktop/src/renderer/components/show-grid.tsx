@@ -3,8 +3,6 @@ import React, { type ReactNode, useState } from "react";
 
 import { cn } from "@/renderer/lib/utils";
 
-import { Badge } from "./ui/badge";
-
 export type ShowCardItem = {
   id: string;
   rating?: number;
@@ -61,23 +59,27 @@ export function ShowCard({
             />
           )}
           {item.rating != null && (
-            <div className="absolute top-0 left-0 z-[1] p-2.5">
-              <Badge
-                variant="glass"
-                className="text-white flex items-center gap-1 align-middle text-xs"
-              >
-                <Flame className="h-[10px] w-[10px] shrink-0 fill-current text-red-500" />
+            <div className="absolute left-2 top-2 z-[1]">
+              <span className="flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                <Flame className="h-3 w-3 shrink-0 fill-current text-orange-400" />
                 {item.rating}
-              </Badge>
+              </span>
             </div>
           )}
+          {/*
+            A stronger scrim than the previous single-stop gradient: on bright
+            key art the two-line title was sitting on the artwork instead of a
+            scrim and became hard to read.
+          */}
           <div
-            className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent pointer-events-none"
+            className="absolute inset-0 bg-gradient-to-t from-black/92 via-black/50 to-transparent pointer-events-none"
             aria-hidden
           />
-          <div className="absolute bottom-0 left-0 right-0 z-[1] flex flex-col flex-wrap gap-1 p-2.5 text-white">
+          <div className="absolute bottom-0 left-0 right-0 z-[1] flex flex-col gap-1.5 p-2.5 text-white">
             {item.badges && <div className="flex flex-row flex-wrap gap-1">{item.badges}</div>}
-            <p className="text-xs font-medium line-clamp-2 break-words">{item.title}</p>
+            <p className="line-clamp-2 break-words text-[13px] font-semibold leading-snug drop-shadow-sm">
+              {item.title}
+            </p>
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { EpisodeCard } from "@/renderer/components/episode-card";
 import { HomeHeroCarousel } from "@/renderer/components/home-hero-carousel";
 import { HorizontalCarousel } from "@/renderer/components/horizontal-carousel";
+import { SectionHeading } from "@/renderer/components/section-heading";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Skeleton } from "@/renderer/components/ui/skeleton";
 import { useResumeHistoryEntry } from "@/renderer/hooks/use-resume-history-entry";
@@ -50,7 +51,7 @@ export function WelcomePage() {
           <HomeHeroCarousel />
         </div>
         <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">Continue watching</h2>
+          <SectionHeading title="Continue watching" />
           {recentlyWatchedLoading ? (
             <p className="text-muted-foreground text-sm">Loading…</p>
           ) : recentlyWatched.length > 0 ? (
@@ -61,7 +62,15 @@ export function WelcomePage() {
                   layout="carousel"
                   thumbnailUrl={entry.episode.thumbnail}
                   badge={`Episode ${String(entry.episode.index)}`}
+                  /*
+                   * Show the series name and the episode number together. The
+                   * stored `title` is the *show* name, so pairing it with the
+                   * episode index is what makes a row of continuations readable;
+                   * previously the card showed only the show name and no episode
+                   * reference at all beyond the badge.
+                   */
                   subtitle={
+                    entry.episode.showName ??
                     entry.episode.title.english ??
                     entry.episode.title.romanji ??
                     entry.episode.title.native ??
@@ -80,7 +89,7 @@ export function WelcomePage() {
           )}
         </section>
         <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">Recently uploaded</h2>
+          <SectionHeading title="Recently uploaded" />
           {recentUploadsLoading ? (
             <RecentUploadsCarouselSkeleton />
           ) : recentUploads.length > 0 ? (

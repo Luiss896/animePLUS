@@ -114,6 +114,16 @@ function buildWatchHistoryEntry(
         romanji: showDetails?.title.romaji ?? episode.title.romanji,
         native: showDetails?.title.native ?? episode.title.native,
       },
+      /*
+       * `title` carries the *show* name here (the rich episode title is not
+       * available at this point), so the series name is also recorded explicitly.
+       * Continuation cards need both: which show, and which episode of it.
+       */
+      showName:
+        showDetails?.title.english ??
+        showDetails?.title.romaji ??
+        showDetails?.title.native ??
+        episode.showName,
       thumbnail: thumb,
       mode,
     },

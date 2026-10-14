@@ -2,8 +2,6 @@ import React, { type ReactNode } from "react";
 
 import { cn } from "@/renderer/lib/utils";
 
-import { Badge } from "./ui/badge";
-
 /** Renders as `M:SS`, or `H:MM:SS` when an hour or longer. */
 function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "0:00";
@@ -77,7 +75,13 @@ export function EpisodeCard({
     >
       <div
         className={cn(
-          "relative w-full rounded-2xl border-2 border-border p-[3px] box-border transition-all group-hover:border-accent-glow/80 group-hover:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] group-hover:shadow-lg group-focus-visible:border-accent-glow/80 group-focus-visible:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] h-40"
+          /*
+           * Height is content-aware rather than a flat h-40. The bottom overlay
+           * now carries a badge plus a two-line title at 13px, which overflowed
+           * the old fixed height and clipped the second line.
+           */
+          "relative w-full rounded-2xl border-2 border-border p-[3px] box-border transition-all group-hover:border-accent-glow/80 group-hover:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] group-hover:shadow-lg group-focus-visible:border-accent-glow/80 group-focus-visible:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)]",
+          layout === "carousel" ? "h-44 sm:h-48" : "h-44"
         )}
       >
         <div className="oa-poster-media relative h-full w-full overflow-hidden rounded-lg bg-muted">
@@ -91,25 +95,31 @@ export function EpisodeCard({
           ) : (
             <div className="h-full w-full bg-muted" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
+          {/*
+            Two-stop scrim instead of one. A single gradient left the lower third
+            of bright thumbnails washed out, so the episode title sat on artwork
+            rather than on a scrim and was hard to read.
+          */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent" />
+
           {durationLabel != null ? (
-            <div className="pointer-events-none absolute top-0 right-0 z-[1] p-2.5">
-              <Badge
-                variant="glass"
-                className="cursor-default tabular-nums text-white hover:bg-transparent/20"
-              >
+            <div className="pointer-events-none absolute right-2 top-2 z-[1]">
+              <span className="rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white backdrop-blur-sm">
                 {durationLabel}
-              </Badge>
+              </span>
             </div>
           ) : null}
-          <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
+
+          <div className="absolute bottom-0 left-0 right-0 flex flex-col items-start gap-1 p-2.5 text-white">
             {badgeContent != null && (
-              <Badge variant="glass" className="cursor-default hover:bg-transparent/20 text-white">
+              <span className="rounded-md bg-accent-glow px-1.5 py-0.5 text-[11px] font-semibold text-background shadow-sm">
                 {badgeContent}
-              </Badge>
+              </span>
             )}
             {subtitle ? (
-              <p className="mt-1 line-clamp-2 text-sm font-semibold">{subtitle}</p>
+              <p className="line-clamp-2 text-[13px] font-semibold leading-snug drop-shadow-sm">
+                {subtitle}
+              </p>
             ) : null}
           </div>
         </div>

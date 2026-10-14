@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { useGoBack } from "@/renderer/hooks/use-go-back";
 import { useShowDetails } from "@/renderer/hooks/use-show-details";
 import { stripAniListDescription } from "@/renderer/lib/anilist-helpers";
+import { cn } from "@/renderer/lib/utils";
 import type { AniListMediaListStatus, Show } from "@/shared/types";
 
 const SHOW_DETAILS_EPISODE_SKELETON_COUNT = 8;
@@ -109,6 +110,7 @@ export function ShowDetailsPage() {
   const [activeMode, setActiveMode] = useState<AnimeMode>(state?.anime?.mode ?? "sub");
   const [episodeQuery, setEpisodeQuery] = useState("");
   const [episodeSort, setEpisodeSort] = useState<EpisodeSort>("newest");
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const providerIdFromQuery = new URLSearchParams(location.search).get("providerId") ?? undefined;
 
   const anime =
@@ -307,16 +309,35 @@ export function ShowDetailsPage() {
             <span className="min-w-0 flex-1 truncate text-sm font-medium">Back</span>
           </div>
 
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <h1 className="text-3xl font-bold leading-tight text-foreground md:text-5xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
+            <div className="max-w-3xl space-y-5">
+              <h1 className="text-3xl font-bold leading-[1.1] tracking-tight text-foreground md:text-5xl">
                 {displayName}
               </h1>
+
               {description && (
-                <p className="line-clamp-3 max-w-2xl text-sm text-muted-foreground md:text-base">
-                  {description}
-                </p>
+                <div className="space-y-2">
+                  <p
+                    className={cn(
+                      "max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base",
+                      // Collapsed by default: the hero must not grow tall enough to
+                      // push the episode list off-screen, but the text was being cut
+                      // with no way to read the rest.
+                      !descriptionExpanded && "line-clamp-3"
+                    )}
+                  >
+                    {description}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setDescriptionExpanded((v) => !v)}
+                    className="text-xs font-medium text-accent-glow transition-colors hover:text-highlight"
+                  >
+                    {descriptionExpanded ? "Show less" : "Read more"}
+                  </button>
+                </div>
               )}
+
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {detailMeta.map((entry) => (
                   <Badge key={entry} variant="secondary">
@@ -353,26 +374,31 @@ export function ShowDetailsPage() {
             </div>
 
             {details?.coverImage && (
+              /*
+               * Fixed aspect ratio plus object-cover. The previous `h-64 w-auto`
+               * let a taller cover overflow the hero and get clipped at the top,
+               * which is what cut the artwork off.
+               */
               <img
                 src={details.coverImage}
                 draggable={false}
                 alt=""
-                className="h-64 w-auto rounded-xl border-2 object-cover border-transparent/20"
+                className="hidden aspect-[2/3] w-[180px] shrink-0 rounded-xl object-cover shadow-2xl shadow-black/50 ring-1 ring-white/15 lg:block"
               />
             )}
           </div>
         </div>
       </div>
 
-      <section className="text-foreground pt-6 md:pt-8">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <section className="text-foreground pt-8 md:pt-10">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full md:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={episodeQuery}
               onChange={(event) => setEpisodeQuery(event.target.value)}
               placeholder="Search episodes..."
-              className="h-10 bg-background/90 pl-9"
+              className="h-10 pl-9"
             />
           </div>
 
