@@ -43,7 +43,7 @@ export function WelcomePage() {
   );
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
+    <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
       {disabledProviderDialog}
       <>
         <div className="-mt-6 -mx-6 md:-mt-8 md:-mx-8">

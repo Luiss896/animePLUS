@@ -69,7 +69,7 @@ export function EpisodeCard({
       disabled={disabled}
       {...(layout === "carousel" ? { "data-carousel-item": true } : {})}
       className={cn(
-        "group text-left focus-visible:outline-none disabled:opacity-60",
+        "group oa-poster-card text-left focus-visible:outline-none disabled:opacity-60",
         layout === "carousel" && "flex-shrink-0 w-60 sm:w-72",
         layout === "grid" && "w-full",
         className
@@ -77,10 +77,10 @@ export function EpisodeCard({
     >
       <div
         className={cn(
-          "relative w-full rounded-2xl border-2 border-border p-[3px] box-border transition-all group-hover:border-primary/80 group-hover:shadow-[0_0_0_1px_rgba(129,140,248,0.7)] group-focus-visible:border-primary/80 group-focus-visible:shadow-[0_0_0_1px_rgba(129,140,248,0.7)] h-40"
+          "relative w-full rounded-2xl border-2 border-border p-[3px] box-border transition-all group-hover:border-accent-glow/80 group-hover:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] group-hover:shadow-lg group-focus-visible:border-accent-glow/80 group-focus-visible:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] h-40"
         )}
       >
-        <div className="relative h-full w-full overflow-hidden rounded-lg bg-muted">
+        <div className="oa-poster-media relative h-full w-full overflow-hidden rounded-lg bg-muted">
           {thumbnailUrl ? (
             <img
               src={thumbnailUrl}

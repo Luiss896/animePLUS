@@ -41,9 +41,9 @@ export type WatchSidebarEpisode = {
 };
 
 const cardHoverClass =
-  "transition-all hover:border-primary/80 hover:shadow-[0_0_0_1px_rgba(129,140,248,0.7)] focus-visible:border-primary/80 focus-visible:shadow-[0_0_0_1px_rgba(129,140,248,0.7)]";
+  "transition-all hover:border-accent-glow/80 hover:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] focus-visible:border-accent-glow/80 focus-visible:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)]";
 
-const currentCardClass = "border-primary/80 shadow-[0_0_0_1px_rgba(129,140,248,0.7)]";
+const currentCardClass = "border-accent-glow/80 shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)]";
 
 const SCROLL_PADDING = 16;
 const ROW_GAP = 8;

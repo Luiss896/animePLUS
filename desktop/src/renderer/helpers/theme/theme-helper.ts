@@ -1,6 +1,8 @@
 import { Theme } from "@/shared/types/theme";
+import { DEFAULT_COLOR_PALETTE, isColorPaletteId, type ColorPaletteId } from "@/shared/types/theme";
 
 const THEME_KEY = "theme";
+const PALETTE_KEY = "theme.palette";
 
 export interface ThemePreferences {
   system: Theme;
@@ -54,6 +56,54 @@ export function applyStoredThemeClass() {
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   updateDocumentTheme(isDark);
+  // Applied here too so the palette is correct on the very first paint and the
+  // UI never flashes the default colours before React mounts.
+  applyStoredPalette();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Colour palettes                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Read the stored palette, falling back to the neutral default.
+ *
+ * Deliberately localStorage rather than electron-store: the value must be
+ * readable synchronously at import time (see `applyStoredThemeClass`) to avoid a
+ * flash of the wrong colours, and the existing light/dark preference is stored
+ * the same way, so this keeps one mechanism instead of two.
+ */
+export function getStoredPalette(): ColorPaletteId {
+  const stored = localStorage.getItem(PALETTE_KEY);
+  return isColorPaletteId(stored) ? stored : DEFAULT_COLOR_PALETTE;
+}
+
+/**
+ * Write the palette to the document root as `data-palette`.
+ *
+ * The `dark`/`light` class mechanism is left untouched — the palette is an
+ * orthogonal layer that only overrides colour tokens, so no existing styling
+ * behaviour changes. `default` removes the attribute entirely so the plain
+ * `:root`/`.dark` tokens apply exactly as before.
+ */
+export function applyPalette(palette: ColorPaletteId) {
+  const root = document.documentElement;
+  if (palette === DEFAULT_COLOR_PALETTE) {
+    root.removeAttribute("data-palette");
+    return;
+  }
+  root.setAttribute("data-palette", palette);
+}
+
+export function applyStoredPalette() {
+  applyPalette(getStoredPalette());
+}
+
+export function setPalette(palette: ColorPaletteId) {
+  localStorage.setItem(PALETTE_KEY, palette);
+  applyPalette(palette);
+  // Let listeners (settings UI, player shell) re-read without prop plumbing.
+  window.dispatchEvent(new CustomEvent("animeplus:palette-change", { detail: palette }));
 }
 
 export async function syncThemeWithLocal() {

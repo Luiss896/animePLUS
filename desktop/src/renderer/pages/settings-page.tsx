@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 
 import { AniListConnectDialog } from "@/renderer/components/anilist-connect-dialog";
+import { PalettePicker } from "@/renderer/components/palette-picker";
 import { ThemePicker } from "@/renderer/components/theme-picker";
 import { Button } from "@/renderer/components/ui/button";
+import { Card } from "@/renderer/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -215,10 +217,10 @@ export function SettingsPage() {
   }, []);
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
+    <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
       <h1 className="text-4xl font-semibold tracking-tight">Settings</h1>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-4">
+      <Card as="section" className="p-5 flex flex-col gap-4">
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">App version</h2>
           <p className="text-sm text-muted-foreground">
@@ -230,11 +232,11 @@ export function SettingsPage() {
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm sm:max-w-md">
             <dt className="text-muted-foreground">Current</dt>
             <dd className="font-mono tabular-nums">
-              {updateLoading ? "…" : (updateCheck?.currentVersion ?? "—")}
+              {updateLoading ? "â€¦" : (updateCheck?.currentVersion ?? "â€”")}
             </dd>
             <dt className="text-muted-foreground">Latest</dt>
             <dd className="font-mono tabular-nums">
-              {updateLoading ? "…" : (updateCheck?.latestVersion ?? "—")}
+              {updateLoading ? "â€¦" : (updateCheck?.latestVersion ?? "â€”")}
             </dd>
           </dl>
 
@@ -253,9 +255,9 @@ export function SettingsPage() {
             Could not check for updates ({updateCheck.error}).
           </p>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-6">
+      <Card as="section" className="p-5 flex flex-col gap-6">
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Integrations</h2>
           <p className="text-sm text-muted-foreground">
@@ -273,7 +275,7 @@ export function SettingsPage() {
             )}
             <p className="text-sm text-muted-foreground">
               {anilistStatusLoading
-                ? "…"
+                ? "â€¦"
                 : anilistStatus?.connected && anilistStatus.username
                   ? `Signed in as ${anilistStatus.username}.`
                   : "Not connected."}
@@ -304,7 +306,7 @@ export function SettingsPage() {
                   void onAnilistDisconnect();
                 }}
               >
-                {anilistDisconnectBusy ? "Disconnecting…" : "Disconnect"}
+                {anilistDisconnectBusy ? "Disconnectingâ€¦" : "Disconnect"}
               </Button>
             </div>
           </div>
@@ -317,9 +319,9 @@ export function SettingsPage() {
             void refreshAnilistStatus();
           }}
         />
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Incognito mode</h2>
           <p className="text-sm text-muted-foreground">
@@ -335,9 +337,9 @@ export function SettingsPage() {
           aria-label="Incognito mode"
           className="sm:shrink-0"
         />
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Watch history</h2>
           <p className="text-sm text-muted-foreground">
@@ -355,9 +357,9 @@ export function SettingsPage() {
         >
           Clear history
         </Button>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Streaming provider</h2>
           <p className="text-sm text-muted-foreground">
@@ -386,17 +388,29 @@ export function SettingsPage() {
             ))}
           </SelectContent>
         </Select>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1 min-w-0">
-          <h2 className="text-sm font-medium">Theme</h2>
-          <p className="text-sm text-muted-foreground">Light, dark, or match your system.</p>
+      <Card as="section" className="p-5 flex flex-col gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1 min-w-0">
+            <h2 className="text-sm font-medium">Theme</h2>
+            <p className="text-sm text-muted-foreground">Light, dark, or match your system.</p>
+          </div>
+          <ThemePicker className="sm:shrink-0" />
         </div>
-        <ThemePicker className="sm:shrink-0" />
-      </section>
 
-      <section className="rounded-xl border border-border p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3">
+          <div className="space-y-1 min-w-0">
+            <h3 className="text-sm font-medium">Colour palette</h3>
+            <p className="text-sm text-muted-foreground">
+              Recolours the interface. Works on top of the light or dark setting above.
+            </p>
+          </div>
+          <PalettePicker />
+        </div>
+      </Card>
+
+      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Logs</h2>
           <p className="text-sm text-muted-foreground">
@@ -418,9 +432,9 @@ export function SettingsPage() {
             void onOpenLogsDirectory();
           }}
         >
-          {openLogsBusy ? "Opening…" : "Open"}
+          {openLogsBusy ? "Openingâ€¦" : "Open"}
         </Button>
-      </section>
+      </Card>
     </div>
   );
 }

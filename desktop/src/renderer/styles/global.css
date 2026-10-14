@@ -77,6 +77,161 @@
   }
 }
 
+/* ==========================================================================
+   COLOUR PALETTES
+   ==========================================================================
+
+   An orthogonal layer on top of light/dark: the `dark` class still decides
+   luminance and `color-scheme`, while `data-palette` only recolours the tokens
+   below. `default` sets no attribute at all, so the blocks above apply unchanged
+   and an existing user sees no difference until they pick a palette.
+
+   The accent scale (--accent-*) is the palette's signature colour, exposed for
+   glows, focus rings and hover states. The semantic --* tokens are re-tinted to
+   match so the whole UI moves together rather than only the buttons.
+
+   Values are raw space-separated HSL triplets, matching the convention above.
+   ========================================================================== */
+
+@layer base {
+  /* Shared: derive nothing, just expose the accent scale to Tailwind. */
+  :root {
+    /* Fallbacks so `bg-accent-solid` etc. resolve even with no palette set. */
+    --accent-solid: 240 5.9% 10%;
+    --accent-solid-foreground: 0 0% 98%;
+    --accent-soft: 240 4.8% 95.9%;
+    --accent-glow: 240 5.9% 10%;
+  }
+
+  .dark {
+    --accent-solid: 0 0% 98%;
+    --accent-solid-foreground: 240 5.9% 10%;
+    --accent-soft: 240 3.7% 15.9%;
+    --accent-glow: 0 0% 98%;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Steins;Gate — electric blue + amber on a deep lab black                */
+  /* ---------------------------------------------------------------------- */
+  .dark[data-palette="steinsgate"] {
+    --background: 217 47% 5%;
+    --foreground: 210 40% 96%;
+    --card: 217 42% 8%;
+    --card-foreground: 210 40% 96%;
+    --popover: 217 45% 7%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 212 100% 59%;
+    --primary-foreground: 217 47% 5%;
+    --secondary: 217 33% 14%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 13%;
+    --muted-foreground: 212 22% 68%;
+    --accent: 217 38% 16%;
+    --accent-foreground: 210 40% 98%;
+    --border: 214 32% 18%;
+    --input: 214 32% 18%;
+    --ring: 212 100% 59%;
+    --sidebar-background: 217 45% 6%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 212 100% 59%;
+    --sidebar-primary-foreground: 217 47% 5%;
+    --sidebar-accent: 217 38% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 214 32% 16%;
+    --sidebar-ring: 212 100% 59%;
+    --accent-solid: 212 100% 59%;
+    --accent-solid-foreground: 217 47% 5%;
+    --accent-soft: 212 60% 18%;
+    --accent-glow: 212 100% 59%;
+    /* Amber reads as the "divergence" highlight across the UI. */
+    --highlight: 35 100% 58%;
+    --highlight-foreground: 217 47% 5%;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Frieren — forest emerald + soft gold, warm and low-contrast            */
+  /* ---------------------------------------------------------------------- */
+  .dark[data-palette="frieren"] {
+    --background: 160 40% 4%;
+    --foreground: 150 20% 95%;
+    --card: 160 32% 7%;
+    --card-foreground: 150 20% 95%;
+    --popover: 160 35% 6%;
+    --popover-foreground: 150 20% 95%;
+    --primary: 158 64% 52%;
+    --primary-foreground: 160 40% 4%;
+    --secondary: 160 22% 13%;
+    --secondary-foreground: 150 20% 95%;
+    --muted: 160 22% 12%;
+    --muted-foreground: 155 15% 66%;
+    --accent: 160 26% 15%;
+    --accent-foreground: 150 20% 97%;
+    --border: 158 18% 17%;
+    --input: 158 18% 17%;
+    --ring: 158 64% 52%;
+    --sidebar-background: 160 38% 5%;
+    --sidebar-foreground: 150 20% 95%;
+    --sidebar-primary: 158 64% 52%;
+    --sidebar-primary-foreground: 160 40% 4%;
+    --sidebar-accent: 160 26% 13%;
+    --sidebar-accent-foreground: 150 20% 97%;
+    --sidebar-border: 158 18% 15%;
+    --sidebar-ring: 158 64% 52%;
+    --accent-solid: 158 64% 52%;
+    --accent-solid-foreground: 160 40% 4%;
+    --accent-soft: 158 35% 16%;
+    --accent-glow: 158 64% 52%;
+    --highlight: 44 70% 66%;
+    --highlight-foreground: 160 40% 4%;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Edgerunners — neon yellow + cyan over Night City black                 */
+  /* ---------------------------------------------------------------------- */
+  .dark[data-palette="cyberpunk"] {
+    --background: 60 25% 3%;
+    --foreground: 60 15% 94%;
+    --card: 60 20% 6%;
+    --card-foreground: 60 15% 94%;
+    --popover: 60 22% 5%;
+    --popover-foreground: 60 15% 94%;
+    /* The signature Cyberpunk yellow. */
+    --primary: 57 94% 52%;
+    --primary-foreground: 60 25% 3%;
+    --secondary: 60 14% 12%;
+    --secondary-foreground: 60 15% 94%;
+    --muted: 60 14% 11%;
+    --muted-foreground: 60 10% 65%;
+    --accent: 60 16% 14%;
+    --accent-foreground: 60 15% 97%;
+    --border: 60 12% 17%;
+    --input: 60 12% 17%;
+    --ring: 57 94% 52%;
+    --sidebar-background: 60 24% 4%;
+    --sidebar-foreground: 60 15% 94%;
+    --sidebar-primary: 57 94% 52%;
+    --sidebar-primary-foreground: 60 25% 3%;
+    --sidebar-accent: 60 16% 12%;
+    --sidebar-accent-foreground: 60 15% 97%;
+    --sidebar-border: 60 12% 15%;
+    --sidebar-ring: 57 94% 52%;
+    --accent-solid: 57 94% 52%;
+    --accent-solid-foreground: 60 25% 3%;
+    --accent-soft: 57 50% 15%;
+    --accent-glow: 57 94% 52%;
+    /* Cyan as the secondary neon. */
+    --highlight: 187 100% 50%;
+    --highlight-foreground: 60 25% 3%;
+  }
+
+  /* Accent scale fallback for palettes that define no --highlight. */
+  :root,
+  .dark {
+    --highlight: 240 5.9% 10%;
+    --highlight-foreground: 0 0% 98%;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -120,5 +275,168 @@
     .clickable {
       -webkit-app-region: no-drag;
     }
+  }
+}
+
+/* ==========================================================================
+   MOTION
+   ==========================================================================
+
+   All animation is plain CSS — no animation library is installed and none is
+   needed. Everything here is decorative: the app is fully usable with motion
+   disabled, which is what the `prefers-reduced-motion` block at the bottom
+   enforces.
+   ========================================================================== */
+
+@layer components {
+  /*
+   * Interactive surface. Lifts slightly and warms its border toward the palette
+   * accent, so hovering a card in Steins;Gate feels different from Edgerunners
+   * without either being hardcoded.
+   */
+  .oa-interactive-card {
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 200ms ease,
+      box-shadow 200ms ease,
+      background-color 200ms ease;
+    will-change: transform;
+  }
+
+  .oa-interactive-card:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--accent-glow) / 0.45);
+    box-shadow:
+      0 8px 24px -12px hsl(var(--accent-glow) / 0.35),
+      0 2px 6px -3px rgb(0 0 0 / 0.35);
+  }
+
+  .oa-interactive-card:active {
+    transform: translateY(0);
+  }
+
+  /*
+   * Poster/media card. Scales the artwork inside a fixed frame rather than the
+   * frame itself, which avoids reflowing the surrounding grid on hover.
+   */
+  .oa-poster-card .oa-poster-media {
+    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .oa-poster-card:hover .oa-poster-media {
+    transform: scale(1.045);
+  }
+
+  /* Accent underline that grows from the left on hover; used by nav items. */
+  .oa-underline-sweep {
+    position: relative;
+  }
+
+  .oa-underline-sweep::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: hsl(var(--accent-glow));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .oa-underline-sweep:hover::after {
+    transform: scaleX(1);
+  }
+
+  /* Subtle sheen used on primary buttons. */
+  .oa-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .oa-sheen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      hsl(var(--accent-solid-foreground) / 0.18) 50%,
+      transparent 80%
+    );
+    transform: translateX(-120%);
+    transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+
+  .oa-sheen:hover::before {
+    transform: translateX(120%);
+  }
+}
+
+@layer utilities {
+  /* Page-level entrance: a single, short, cheap animation. */
+  .oa-page-enter {
+    animation: oa-fade-rise 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Staggered list entrance; `--oa-i` is set inline by the consumer. */
+  .oa-stagger {
+    animation: oa-fade-rise 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--oa-i, 0) * 38ms);
+  }
+
+  .oa-glow-ring {
+    box-shadow: 0 0 0 1px hsl(var(--accent-glow) / 0.5);
+  }
+}
+
+@keyframes oa-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes oa-pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/*
+ * Accessibility: honour the OS "reduce motion" setting. Decorative motion is
+ * removed rather than merely shortened, while colour feedback stays so hover
+ * still reads as interactive.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .oa-interactive-card,
+  .oa-poster-card .oa-poster-media,
+  .oa-sheen::before,
+  .oa-underline-sweep::after {
+    transition: none !important;
+  }
+
+  .oa-interactive-card:hover {
+    transform: none;
+  }
+
+  .oa-poster-card:hover .oa-poster-media {
+    transform: none;
+  }
+
+  .oa-page-enter,
+  .oa-stagger {
+    animation: none !important;
   }
 }

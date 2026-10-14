@@ -42,6 +42,17 @@ module.exports = {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          /** Palette signature colour — solid fill. */
+          solid: "hsl(var(--accent-solid))",
+          "solid-foreground": "hsl(var(--accent-solid-foreground))",
+          /** Muted tint of the accent, for selected/active surfaces. */
+          soft: "hsl(var(--accent-soft))",
+          /** Accent used for glows, rings and hover borders. */
+          glow: "hsl(var(--accent-glow))",
+        },
+        highlight: {
+          DEFAULT: "hsl(var(--highlight))",
+          foreground: "hsl(var(--highlight-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -60,30 +71,6 @@ module.exports = {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
-        },
-        violet: {
-          DEFAULT: "hsl(var(--violet))",
-          foreground: "hsl(var(--violet-foreground))",
-        },
-        rose: {
-          DEFAULT: "hsl(var(--rose))",
-          foreground: "hsl(var(--rose-foreground))",
-        },
-        blue: {
-          DEFAULT: "hsl(var(--blue))",
-          foreground: "hsl(var(--blue-foreground))",
-        },
-        green: {
-          DEFAULT: "hsl(var(--green))",
-          foreground: "hsl(var(--green-foreground))",
-        },
-        orange: {
-          DEFAULT: "hsl(var(--orange))",
-          foreground: "hsl(var(--orange-foreground))",
-        },
-        zinc: {
-          DEFAULT: "hsl(var(--zinc))",
-          foreground: "hsl(var(--zinc-foreground))",
         },
       },
       borderRadius: {

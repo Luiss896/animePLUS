@@ -35,7 +35,7 @@ export function ShowCard({
     <button
       type="button"
       className={cn(
-        "group text-left focus-visible:outline-none",
+        "group oa-poster-card text-left focus-visible:outline-none",
         layout === "carousel" && "flex-shrink-0 w-36 sm:w-40",
         layout === "grid" && "w-full min-w-0"
       )}
@@ -43,8 +43,8 @@ export function ShowCard({
       onClick={item.onClick}
       onDragStart={(event) => event.preventDefault()}
     >
-      <div className="relative w-full aspect-[2/3] rounded-2xl border-2 border-border transition-all p-[3px] box-border group-hover:border-primary/80 group-hover:shadow-[0_0_0_1px_rgba(129,140,248,0.7)] group-focus-visible:border-primary/80 group-focus-visible:shadow-[0_0_0_1px_rgba(129,140,248,0.7)]">
-        <div className="relative h-full w-full rounded-xl overflow-hidden bg-muted">
+      <div className="relative w-full aspect-[2/3] rounded-2xl border-2 border-border transition-all p-[3px] box-border group-hover:border-accent-glow/80 group-hover:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)] group-hover:shadow-lg group-focus-visible:border-accent-glow/80 group-focus-visible:shadow-[0_0_0_1px_hsl(var(--accent-glow)/0.7)]">
+        <div className="oa-poster-media relative h-full w-full rounded-xl overflow-hidden bg-muted">
           {showFallback ? (
             <div className="h-full w-full flex items-center justify-center bg-muted-foreground/5 text-muted-foreground/70">
               <ImageOff className="h-6 w-6" aria-hidden="true" />
