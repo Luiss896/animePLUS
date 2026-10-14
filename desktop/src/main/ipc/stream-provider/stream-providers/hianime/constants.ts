@@ -1,5 +1,13 @@
 export const HIANIME_BASE = process.env.HIANIME_BASE || "https://hianime.at";
 export const HIANIME_REFERER = `${HIANIME_BASE.replace(/\/$/, "")}/`;
+/**
+ * Chromium storage partition for the hidden provider window.
+ *
+ * NOTE: the `openanime-` prefix is a legacy storage identifier, deliberately NOT
+ * renamed with the animePLUS rebrand. It is never shown to the user; changing it
+ * would point the app at an empty profile and invalidate the provider cookies and
+ * anti-bot challenge state that live there.
+ */
 export const HIANIME_PARTITION = "persist:openanime-hianime";
 
 export function isHianimeHost(hostname: string): boolean {

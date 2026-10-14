@@ -1,5 +1,6 @@
 export const ANIDB_BASE = process.env.ANIDB_BASE || "https://anidb.app";
 export const ANIDB_REFERER = `${ANIDB_BASE.replace(/\/$/, "")}/`;
+/** Legacy storage-partition id; intentionally not renamed (see hianime/constants.ts). */
 export const ANIDB_PARTITION = "persist:openanime-anidb";
 
 export function isAnidbHost(hostname: string): boolean {

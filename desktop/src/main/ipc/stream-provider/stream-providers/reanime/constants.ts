@@ -1,4 +1,5 @@
 export const FLIXCLOUD_BASE = "https://flixcloud.cc";
+/** Legacy storage-partition id; intentionally not renamed (see hianime/constants.ts). */
 export const FLIXCLOUD_PARTITION = "persist:openanime-flixcloud";
 export const FLIXCLOUD_REFERER = `${FLIXCLOUD_BASE}/`;
 

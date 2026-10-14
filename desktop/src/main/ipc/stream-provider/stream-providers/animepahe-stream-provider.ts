@@ -21,6 +21,7 @@ interface AnimePaheSource {
 }
 
 const BASE = process.env.ANIMEPAHE_BASE || "https://animepahe.pw";
+/** Legacy storage-partition id; intentionally not renamed (see hianime/constants.ts). */
 const PARTITION = "persist:openanime-animepahe";
 const IS_DEV = process.env.NODE_ENV !== "production";
 
