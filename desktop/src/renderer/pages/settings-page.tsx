@@ -31,7 +31,6 @@ function openExternalUrl(url: string) {
 }
 
 export function SettingsPage() {
-  const isDevelopment = process.env.NODE_ENV !== "production";
   const [updateCheck, setUpdateCheck] = useState<AppUpdateCheckResult | null>(null);
   const [updateLoading, setUpdateLoading] = useState(true);
   const [watchHistoryLoading, setWatchHistoryLoading] = useState(true);
@@ -42,6 +41,9 @@ export function SettingsPage() {
   const [anilistConnectOpen, setAnilistConnectOpen] = useState(false);
   const [anilistDisconnectBusy, setAnilistDisconnectBusy] = useState(false);
   const [anilistError, setAnilistError] = useState<string | null>(null);
+  const [autoAddSequels, setAutoAddSequels] = useState(false);
+  const [autoAddLoading, setAutoAddLoading] = useState(true);
+  const [autoAddBusy, setAutoAddBusy] = useState(false);
   const enabledStreamProviders = getEnabledStreamProviders();
   // Mirrors resolveEnabledStreamProvider() in the main process, sharing the same
   // constant so the two can no longer drift apart.
@@ -148,13 +150,40 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isDevelopment) {
-      setAnilistStatusLoading(false);
-      return;
-    }
-
+    // Always read the status. This used to be gated on `isDevelopment`, which
+    // meant a packaged build never asked the main process whether a token was
+    // stored: the UI showed "not connected" on every launch even though the
+    // saved token was still valid and the app kept syncing with AniList.
     void refreshAnilistStatus();
-  }, [isDevelopment, refreshAnilistStatus]);
+  }, [refreshAnilistStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.anilist
+      .getAutoAddSequels()
+      .then((enabled) => {
+        if (!cancelled) setAutoAddSequels(enabled);
+      })
+      .catch(() => {
+        /* keep the default (off) if the setting cannot be read */
+      })
+      .finally(() => {
+        if (!cancelled) setAutoAddLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onAutoAddChange = useCallback(async (enabled: boolean) => {
+    setAutoAddBusy(true);
+    try {
+      const applied = await window.anilist.setAutoAddSequels(enabled);
+      setAutoAddSequels(applied);
+    } finally {
+      setAutoAddBusy(false);
+    }
+  }, []);
 
   const onAnilistDisconnect = useCallback(async () => {
     setAnilistDisconnectBusy(true);
@@ -319,6 +348,26 @@ export function SettingsPage() {
             void refreshAnilistStatus();
           }}
         />
+
+        <div className="flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1 min-w-0">
+            <h3 className="text-sm font-medium">Track new seasons automatically</h3>
+            <p className="text-sm text-muted-foreground">
+              AniList does not link seasons together, so a sequel can be airing without ever
+              appearing here. When this is on, announced and currently-airing sequels of shows you
+              have completed or are watching are added to your list as <em>Planning</em>.
+            </p>
+          </div>
+          <Switch
+            className="sm:shrink-0"
+            checked={autoAddSequels}
+            disabled={autoAddLoading || autoAddBusy || !anilistStatus?.connected}
+            onCheckedChange={(checked) => {
+              void onAutoAddChange(checked);
+            }}
+            aria-label="Add new seasons to my AniList list automatically"
+          />
+        </div>
       </Card>
 
       <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

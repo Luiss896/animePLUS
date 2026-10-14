@@ -99,3 +99,32 @@ export type UpcomingSeasonsResult =
   /** Throttled by AniList; `retryAfterSeconds` says when to try again. */
   | { status: "rate-limited"; retryAfterSeconds: number }
   | { status: "error"; message: string };
+
+/* -------------------------------------------------------------------------- */
+/* Automatic sequel tracking                                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface PlannedAddition {
+  mediaId: number;
+  title: string;
+  /** The show already on the user's list that led to this addition. */
+  fromTitle: string;
+  status: string;
+  season: string | null;
+  seasonYear: number | null;
+}
+
+/**
+ * Outcome of an auto-add pass.
+ *
+ * `enabled: false` means the feature is off and nothing was inspected — the
+ * caller should show no UI for it at all.
+ */
+export interface AutoAddResult {
+  enabled: boolean;
+  added: PlannedAddition[];
+  /** True when more sequels were found than the per-run safety cap allows. */
+  truncated: boolean;
+  /** Present when the pass stopped early; already-made additions still count. */
+  error?: string;
+}

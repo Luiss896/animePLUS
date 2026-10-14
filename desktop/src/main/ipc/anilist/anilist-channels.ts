@@ -15,3 +15,6 @@ export const ANILIST_DELETE_LIST_ENTRY_CHANNEL = "anilist:delete-list-entry";
 export const ANILIST_TOGGLE_FAVOURITE_CHANNEL = "anilist:toggle-favourite";
 export const ANILIST_SYNC_WATCH_PROGRESS_CHANNEL = "anilist:sync-watch-progress";
 export const ANILIST_UPCOMING_SEASONS_CHANNEL = "anilist:upcoming-seasons";
+export const ANILIST_AUTO_ADD_SEQUELS_GET_CHANNEL = "anilist:auto-add-sequels:get";
+export const ANILIST_AUTO_ADD_SEQUELS_SET_CHANNEL = "anilist:auto-add-sequels:set";
+export const ANILIST_AUTO_ADD_RUN_CHANNEL = "anilist:auto-add-sequels:run";

@@ -24,7 +24,15 @@ import {
   ANILIST_SYNC_WATCH_PROGRESS_CHANNEL,
   ANILIST_TOGGLE_FAVOURITE_CHANNEL,
   ANILIST_UPCOMING_SEASONS_CHANNEL,
+  ANILIST_AUTO_ADD_SEQUELS_GET_CHANNEL,
+  ANILIST_AUTO_ADD_SEQUELS_SET_CHANNEL,
+  ANILIST_AUTO_ADD_RUN_CHANNEL,
 } from "./anilist-channels";
+import {
+  autoAddMissingSequels,
+  isAutoAddSequelsEnabled,
+  setAutoAddSequelsEnabled,
+} from "./anilist-auto-add";
 import { fetchAniListFavourites, toggleAniListFavourite } from "./anilist-favourites";
 import {
   deleteAniListMediaListEntry,
@@ -42,6 +50,7 @@ import {
 import { getAniListPopularSeasonAnime } from "./anilist-popular-season";
 import { searchAniListMedia } from "./anilist-search";
 import { getAniListShowDetails } from "./anilist-show-details";
+import { getAniListViewerId } from "./anilist-authed-api";
 import { fetchUpcomingSeasons } from "./anilist-upcoming-seasons";
 
 export function addAniListListeners() {
@@ -98,4 +107,22 @@ export function addAniListListeners() {
   ipcMain.handle(ANILIST_UPCOMING_SEASONS_CHANNEL, (_event, force?: boolean) =>
     fetchUpcomingSeasons({ force: force === true })
   );
+
+  ipcMain.handle(ANILIST_AUTO_ADD_SEQUELS_GET_CHANNEL, () => isAutoAddSequelsEnabled());
+
+  ipcMain.handle(ANILIST_AUTO_ADD_SEQUELS_SET_CHANNEL, (_event, enabled: unknown) => {
+    setAutoAddSequelsEnabled(enabled === true);
+    return isAutoAddSequelsEnabled();
+  });
+
+  ipcMain.handle(ANILIST_AUTO_ADD_RUN_CHANNEL, async () => {
+    if (isIncognitoEnabled()) {
+      return { enabled: false, added: [], truncated: false };
+    }
+    if (!isAutoAddSequelsEnabled()) {
+      return { enabled: false, added: [], truncated: false };
+    }
+    const userId = await getAniListViewerId();
+    return autoAddMissingSequels(userId);
+  });
 }

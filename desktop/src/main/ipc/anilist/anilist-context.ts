@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { UpcomingSeasonsResult } from "@/shared/upcoming-seasons-types";
+import type { AutoAddResult, UpcomingSeasonsResult } from "@/shared/upcoming-seasons-types";
 import type {
   AniListFavouritesPageResult,
   AniListIntegrationStatus,
@@ -28,6 +28,9 @@ import {
   ANILIST_SHOW_DETAILS_CHANNEL,
   ANILIST_SUBMIT_MANUAL_TOKEN_CHANNEL,
   ANILIST_SYNC_WATCH_PROGRESS_CHANNEL,
+  ANILIST_AUTO_ADD_RUN_CHANNEL,
+  ANILIST_AUTO_ADD_SEQUELS_GET_CHANNEL,
+  ANILIST_AUTO_ADD_SEQUELS_SET_CHANNEL,
   ANILIST_TOGGLE_FAVOURITE_CHANNEL,
   ANILIST_UPCOMING_SEASONS_CHANNEL,
 } from "./anilist-channels";
@@ -66,5 +69,11 @@ export function exposeAniListContext() {
       ipcRenderer.invoke(ANILIST_SYNC_WATCH_PROGRESS_CHANNEL, input) as Promise<AniListListEntry | null>,
     getUpcomingSeasons: (force?: boolean) =>
       ipcRenderer.invoke(ANILIST_UPCOMING_SEASONS_CHANNEL, force) as Promise<UpcomingSeasonsResult>,
+    getAutoAddSequels: () =>
+      ipcRenderer.invoke(ANILIST_AUTO_ADD_SEQUELS_GET_CHANNEL) as Promise<boolean>,
+    setAutoAddSequels: (enabled: boolean) =>
+      ipcRenderer.invoke(ANILIST_AUTO_ADD_SEQUELS_SET_CHANNEL, enabled) as Promise<boolean>,
+    runAutoAddSequels: () =>
+      ipcRenderer.invoke(ANILIST_AUTO_ADD_RUN_CHANNEL) as Promise<AutoAddResult>,
   });
 }

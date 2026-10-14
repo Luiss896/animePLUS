@@ -1,4 +1,4 @@
-import { CalendarDays, Clock, Loader2, RefreshCw, Sparkles, Tv } from "lucide-react";
+import { CalendarDays, Clock, Loader2, PlusCircle, RefreshCw, Sparkles, Tv } from "lucide-react";
 import React, { useMemo } from "react";
 
 import { Badge } from "@/renderer/components/ui/badge";
@@ -7,6 +7,7 @@ import { Card } from "@/renderer/components/ui/card";
 import { useUpcomingSeasons } from "@/renderer/hooks/use-upcoming-seasons";
 import type {
   AiringShow,
+  AutoAddResult,
   UpcomingSeason,
   UpcomingSeasonsResult,
 } from "@/shared/upcoming-seasons-types";
@@ -275,7 +276,7 @@ function SectionHeading({
 /* -------------------------------------------------------------------------- */
 
 export function FollowingPage() {
-  const { result, loading, refresh } = useUpcomingSeasons();
+  const { result, loading, refresh, autoAdd } = useUpcomingSeasons();
 
   const openOnAniList = (mediaId: number) => {
     const url = `https://anilist.co/anime/${mediaId}`;
@@ -315,9 +316,59 @@ export function FollowingPage() {
           Checking your list…
         </div>
       ) : (
-        <FollowingContent result={result} onOpen={openOnAniList} onRefresh={refresh} />
+        <>
+          <AutoAddNotice autoAdd={autoAdd} />
+          <FollowingContent result={result} onOpen={openOnAniList} onRefresh={refresh} />
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * Reports the outcome of an automatic sequel-tracking pass.
+ *
+ * Rendered only when the feature is on and it actually did something, so it
+ * never becomes permanent chrome for users who leave the setting off.
+ */
+function AutoAddNotice({ autoAdd }: { autoAdd: AutoAddResult | null }) {
+  if (!autoAdd || !autoAdd.enabled) return null;
+  if (autoAdd.added.length === 0 && !autoAdd.error) return null;
+
+  return (
+    <Card padding="sm" variant="muted" className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-sm">
+        <PlusCircle className="h-4 w-4 shrink-0 text-accent-glow" />
+        <span>
+          {autoAdd.added.length === 0
+            ? "Automatic season tracking could not run."
+            : autoAdd.added.length === 1
+              ? "Added 1 new season to your AniList list as Planning."
+              : `Added ${autoAdd.added.length} new seasons to your AniList list as Planning.`}
+        </span>
+      </div>
+
+      {autoAdd.added.length > 0 ? (
+        <ul className="flex flex-col gap-1 pl-6 text-xs text-muted-foreground">
+          {autoAdd.added.slice(0, 5).map((item) => (
+            <li key={item.mediaId} className="truncate">
+              {item.title} <span className="opacity-70">— from {item.fromTitle}</span>
+            </li>
+          ))}
+          {autoAdd.added.length > 5 ? (
+            <li className="opacity-70">and {autoAdd.added.length - 5} more…</li>
+          ) : null}
+        </ul>
+      ) : null}
+
+      {autoAdd.truncated ? (
+        <p className="pl-6 text-xs text-muted-foreground">
+          More sequels were found than the per-run limit allows; the rest will be added next time.
+        </p>
+      ) : null}
+
+      {autoAdd.error ? <p className="pl-6 text-xs text-destructive">{autoAdd.error}</p> : null}
+    </Card>
   );
 }
 

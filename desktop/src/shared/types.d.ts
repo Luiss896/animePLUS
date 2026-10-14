@@ -1,6 +1,6 @@
 import { AppUpdateCheckResult } from "./app-update-types";
 import type { SearchFilterDefinition, SearchFilterValues } from "./search-filters";
-import type { UpcomingSeasonsResult } from "./upcoming-seasons-types";
+import type { AutoAddResult, UpcomingSeasonsResult } from "./upcoming-seasons-types";
 
 interface ThemeContext {
   toggle: () => Promise<boolean>;
@@ -431,6 +431,11 @@ export interface AniListContext {
   syncWatchProgress: (input: AniListSyncWatchProgressInput) => Promise<AniListListEntry | null>;
   /** Upcoming seasons for shows on the user's list. `force` bypasses the cache. */
   getUpcomingSeasons: (force?: boolean) => Promise<UpcomingSeasonsResult>;
+  /** Whether announced sequels are added to the list automatically. */
+  getAutoAddSequels: () => Promise<boolean>;
+  setAutoAddSequels: (enabled: boolean) => Promise<boolean>;
+  /** Runs an auto-add pass now; returns what was added. */
+  runAutoAddSequels: () => Promise<AutoAddResult>;
 }
 
 declare global {
