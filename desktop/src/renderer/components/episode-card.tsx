@@ -1,6 +1,7 @@
-import React, { type ReactNode } from "react";
+import React, { type MouseEvent, type ReactNode } from "react";
 
 import { cn } from "@/renderer/lib/utils";
+import { Trash2 } from "lucide-react";
 
 /** Renders as `M:SS`, or `H:MM:SS` when an hour or longer. */
 function formatDurationMs(ms: number): string {
@@ -39,6 +40,13 @@ export type EpisodeCardProps = {
   /** When set, shows a glass badge top-right: `24:00`, or `12:34/24:00` if `currentDurationMs` is also set. */
   totalDurationMs?: number;
   currentDurationMs?: number;
+  /**
+   * When set, reveals a delete control in the top-left corner on hover/focus.
+   * Used by Continue watching to drop a show from the row.
+   */
+  onRemove?: () => void;
+  /** Accessible label for the delete control; defaults to a generic Remove. */
+  removeLabel?: string;
 };
 
 export function EpisodeCard({
@@ -52,8 +60,18 @@ export function EpisodeCard({
   layout = "grid",
   totalDurationMs,
   currentDurationMs,
+  onRemove,
+  removeLabel = "Remove",
 }: EpisodeCardProps) {
   const badgeContent = badge ?? (episodeIndex != null ? `Episode ${episodeIndex}` : null);
+
+  const handleRemove = (event: MouseEvent<HTMLSpanElement>) => {
+    // The card itself is a <button> whose onClick resumes playback, so the
+    // delete control must not let the event bubble up to it.
+    event.stopPropagation();
+    event.preventDefault();
+    onRemove?.();
+  };
 
   const durationLabel =
     totalDurationMs != null && Number.isFinite(totalDurationMs) && totalDurationMs >= 0
@@ -101,6 +119,32 @@ export function EpisodeCard({
             rather than on a scrim and was hard to read.
           */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent" />
+
+          {/*
+            Delete control, top-left. It is a <span role="button"> rather than a
+            real <button> because the card root is already a <button> and nesting
+            them is invalid HTML. Hidden until hover/focus so it does not compete
+            with the artwork, but always reachable by keyboard.
+          */}
+          {onRemove ? (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={removeLabel}
+              title={removeLabel}
+              onClick={handleRemove}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRemove();
+                }
+              }}
+              className="absolute left-2 top-2 z-[2] flex h-7 w-7 cursor-pointer items-center justify-center rounded-md bg-black/70 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-destructive hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 group-hover:opacity-100 group-focus-within:opacity-100"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </span>
+          ) : null}
 
           {durationLabel != null ? (
             <div className="pointer-events-none absolute right-2 top-2 z-[1]">

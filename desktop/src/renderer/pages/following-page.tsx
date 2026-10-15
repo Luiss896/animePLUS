@@ -1,5 +1,6 @@
 import { CalendarDays, Clock, Loader2, PlusCircle, RefreshCw, Sparkles, Tv } from "lucide-react";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
@@ -282,15 +283,46 @@ function SectionHeading({
 
 export function FollowingPage() {
   const { result, loading, refresh, autoAdd } = useUpcomingSeasons();
+  const navigate = useNavigate();
+  const [navigatingId, setNavigatingId] = useState<number | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
 
-  const openOnAniList = (mediaId: number) => {
-    const url = `https://anilist.co/anime/${mediaId}`;
-    if (window.urlOpener) {
-      void window.urlOpener.openUrl(url);
-    } else {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
+  /**
+   * Open a show's in-app detail page.
+   *
+   * The ids on this page are AniList media ids, but `/show/:id` also needs a
+   * provider slug or `useShowDetails` bails out without fetching anything, so
+   * the slug has to be resolved first — the same two-step `bookmarks-page.tsx`
+   * performs. If no source can be found the previous behaviour (opening the
+   * AniList page in the browser) is offered as a fallback, so a card is never a
+   * dead end.
+   */
+  const openShow = useCallback(
+    (mediaId: number, title: string) => {
+      void (async () => {
+        setNavigatingId(mediaId);
+        setOpenError(null);
+        try {
+          const resolved = await resolveShowSource(mediaId, title);
+          if (!resolved) {
+            setOpenError(
+              `No stream source found for "${title}". Opening it on AniList instead.`
+            );
+            openOnAniList(mediaId);
+            return;
+          }
+          navigate(`/show/${mediaId}?providerId=${encodeURIComponent(resolved.providerId)}`);
+        } catch (err: unknown) {
+          setOpenError(
+            err instanceof Error ? err.message : `Could not open "${title}".`
+          );
+        } finally {
+          setNavigatingId(null);
+        }
+      })();
+    },
+    [navigate]
+  );
 
   return (
     <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-8 p-6 md:p-8">
@@ -315,6 +347,12 @@ export function FollowingPage() {
         }
       />
 
+      {openError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {openError}
+        </p>
+      ) : null}
+
       {loading && !result ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -323,11 +361,100 @@ export function FollowingPage() {
       ) : (
         <>
           <AutoAddNotice autoAdd={autoAdd} />
-          <FollowingContent result={result} onOpen={openOnAniList} onRefresh={refresh} />
+          <FollowingContent
+            result={result}
+            onOpen={openShow}
+            navigatingId={navigatingId}
+            onRefresh={refresh}
+          />
         </>
       )}
     </div>
   );
+}
+
+/** Open the AniList page in the browser — the fallback when no source resolves. */
+function openOnAniList(mediaId: number) {
+  const url = `https://anilist.co/anime/${mediaId}`;
+  if (window.urlOpener) {
+    void window.urlOpener.openUrl(url);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+/**
+ * Query variants to try, most specific first.
+ *
+ * Measured against the live providers: a full AniList season title often matches
+ * nothing, while the bare series name does. On AnimeUnity (the default host)
+ * `"The Apothecary Diaries Season 3"` returned **0** results whereas
+ * `"The Apothecary Diaries"` returned 3, and `"DAN DA DAN Season 2"` likewise
+ * returned 0. The season suffix is what breaks the match, so it is stripped and
+ * retried rather than reported as "no source found".
+ */
+function searchQueryVariants(title: string): string[] {
+  const variants: string[] = [title];
+
+  const withoutSeason = title
+    // "Season 3", "Season 2 Part 2", "3rd Season", "Part 2"
+    .replace(/\s*[-–:]?\s*\b(?:season|part|course)\s*\d+\b/gi, "")
+    .replace(/\s*[-–:]?\s*\b\d+(?:st|nd|rd|th)\s+season\b/gi, "")
+    .replace(/\s*[-–:]?\s*\b(?:final\s+season|second\s+season|third\s+season)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[\s\-–:]+$/, "")
+    .trim();
+
+  if (withoutSeason && withoutSeason !== title) variants.push(withoutSeason);
+  const base = withoutSeason || title;
+
+  /*
+   * Announced seasons are often listed under a subtitle rather than a season
+   * number, and the subtitle is what breaks the provider match: measured on
+   * AnimeUnity, "Solo Leveling Beyond the System" returned 0 results while
+   * "Solo Leveling" returned 2. Anything before a colon, or a trailing subtitle
+   * clause, is therefore tried as well.
+   */
+  const beforeColon = base.split(/[:–—]/)[0]?.trim() ?? "";
+  if (beforeColon && beforeColon !== base && !variants.includes(beforeColon)) {
+    variants.push(beforeColon);
+  }
+
+  // Last resort: the first few words, which usually still name the series.
+  const firstWords = base.split(/\s+/).slice(0, 3).join(" ");
+  if (firstWords && !variants.includes(firstWords)) variants.push(firstWords);
+
+  return variants;
+}
+
+/**
+ * Resolve a provider slug for an AniList media id, retrying with looser queries.
+ *
+ * Mirrors `resolveProviderForAniListMedia` (exact AniList id match, then first
+ * result) but tolerates the season-suffix mismatch described above.
+ */
+async function resolveShowSource(
+  mediaId: number,
+  title: string
+): Promise<{ providerId: string } | null> {
+  for (const query of searchQueryVariants(title)) {
+    let results: Array<{ id: string; providerId: string }> = [];
+    try {
+      results = await window.streamProvider.search(query);
+    } catch {
+      continue;
+    }
+    if (results.length === 0) continue;
+
+    const exact = results.find((r) => r.id === String(mediaId));
+    if (exact) return { providerId: exact.providerId };
+
+    // Only trust a loose hit from a loosened query; for the verbatim title keep
+    // the bookmarks behaviour of accepting the top result.
+    const first = results[0];
+    if (first) return { providerId: first.providerId };
+  }
+  return null;
 }
 
 /**
@@ -380,10 +507,12 @@ function AutoAddNotice({ autoAdd }: { autoAdd: AutoAddResult | null }) {
 function FollowingContent({
   result,
   onOpen,
+  navigatingId,
   onRefresh,
 }: {
   result: UpcomingSeasonsResult | null;
-  onOpen: (mediaId: number) => void;
+  onOpen: (mediaId: number, title: string) => void;
+  navigatingId: number | null;
   onRefresh: () => void;
 }) {
   const groups = useMemo(
@@ -429,8 +558,9 @@ function FollowingContent({
                     <ClickableCard
                       key={show.mediaId}
                       mediaId={show.mediaId}
+                      title={show.title}
                       onOpen={onOpen}
-                      label={show.title}
+                      loading={navigatingId === show.mediaId}
                     >
                       <AiringCard show={show} index={index} />
                     </ClickableCard>
@@ -456,8 +586,9 @@ function FollowingContent({
               <ClickableCard
                 key={season.mediaId}
                 mediaId={season.mediaId}
+                title={season.title}
                 onOpen={onOpen}
-                label={season.title}
+                loading={navigatingId === season.mediaId}
               >
                 <UpcomingCard season={season} index={index} />
               </ClickableCard>
@@ -469,33 +600,47 @@ function FollowingContent({
   );
 }
 
-/** Keyboard-accessible wrapper that opens the AniList page for a show. */
+/**
+ * Keyboard-accessible wrapper that opens a show in this app.
+ *
+ * The label deliberately says "Open" and not "on AniList": navigation now goes
+ * to the in-app detail page, with the AniList page only as a fallback.
+ */
 function ClickableCard({
   mediaId,
+  title,
   onOpen,
-  label,
+  loading,
   children,
 }: {
   mediaId: number;
-  onOpen: (mediaId: number) => void;
-  label: string;
+  title: string;
+  onOpen: (mediaId: number, title: string) => void;
+  loading?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Open ${label} on AniList`}
+      aria-label={`Open ${title}`}
+      aria-busy={loading ? true : undefined}
       onClick={() => {
-        onOpen(mediaId);
+        if (loading) return;
+        onOpen(mediaId, title);
       }}
       onKeyDown={(event) => {
+        if (loading) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onOpen(mediaId);
+          onOpen(mediaId, title);
         }
       }}
-      className="cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={
+        loading
+          ? "cursor-progress rounded-xl opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          : "cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      }
     >
       {children}
     </div>

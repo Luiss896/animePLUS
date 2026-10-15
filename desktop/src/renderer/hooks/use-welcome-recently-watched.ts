@@ -41,9 +41,25 @@ export function useWelcomeRecentlyWatched() {
     setHistoryEntries([]);
   }, []);
 
+  /**
+   * Drop one show from Continue watching.
+   *
+   * The main-process handler returns nothing and does not report whether the id
+   * matched, so the list is filtered optimistically — the same approach
+   * `history-page.tsx` uses. Because `recentlyWatched` is derived with `useMemo`
+   * over `historyEntries`, removing the newest entry for a show lets its
+   * next-most-recent episode surface in the same slot, which is the desired
+   * behaviour for a "remove from this row" action.
+   */
+  const removeRecentlyWatched = useCallback(async (id: string) => {
+    await window.recentlyWatched.remove(id);
+    setHistoryEntries((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
   return {
     recentlyWatched,
     recentlyWatchedLoading,
     clearRecentlyWatched,
+    removeRecentlyWatched,
   };
 }

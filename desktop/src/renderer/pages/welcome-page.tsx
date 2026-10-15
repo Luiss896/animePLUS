@@ -10,9 +10,28 @@ import { Skeleton } from "@/renderer/components/ui/skeleton";
 import { useResumeHistoryEntry } from "@/renderer/hooks/use-resume-history-entry";
 import { useWelcomeRecentlyUploaded } from "@/renderer/hooks/use-welcome-recent-uploads";
 import { useWelcomeRecentlyWatched } from "@/renderer/hooks/use-welcome-recently-watched";
-import type { Episode } from "@/shared/types";
+import type { Episode, HistoryEntry } from "@/shared/types";
 
 const RECENT_PAGE_SIZE = 12;
+
+/**
+ * Human-readable name for a history entry.
+ *
+ * The stored `title` is the *show* name, so pairing it with the episode index is
+ * what makes a row of continuations readable; previously the card showed only
+ * the show name and no episode reference at all beyond the badge. Shared by the
+ * card subtitle and the delete control's accessible label so the two cannot
+ * drift apart.
+ */
+function historyEntryLabel(entry: HistoryEntry): string {
+  return (
+    entry.episode.showName ??
+    entry.episode.title.english ??
+    entry.episode.title.romanji ??
+    entry.episode.title.native ??
+    entry.episode.id
+  );
+}
 
 function RecentUploadsCarouselSkeleton({ count = 8 }: { count?: number }) {
   return (
@@ -34,7 +53,8 @@ export function WelcomePage() {
   const navigate = useNavigate();
   const { resumeHistoryEntry, disabledProviderDialog } = useResumeHistoryEntry();
   const { recentUploads, recentUploadsLoading } = useWelcomeRecentlyUploaded(RECENT_PAGE_SIZE);
-  const { recentlyWatched, recentlyWatchedLoading } = useWelcomeRecentlyWatched();
+  const { recentlyWatched, recentlyWatchedLoading, removeRecentlyWatched } =
+    useWelcomeRecentlyWatched();
 
   const openRecentAnime = useCallback(
     (episode: Episode) => {
@@ -62,25 +82,16 @@ export function WelcomePage() {
                   layout="carousel"
                   thumbnailUrl={entry.episode.thumbnail}
                   badge={`Episode ${String(entry.episode.index)}`}
-                  /*
-                   * Show the series name and the episode number together. The
-                   * stored `title` is the *show* name, so pairing it with the
-                   * episode index is what makes a row of continuations readable;
-                   * previously the card showed only the show name and no episode
-                   * reference at all beyond the badge.
-                   */
-                  subtitle={
-                    entry.episode.showName ??
-                    entry.episode.title.english ??
-                    entry.episode.title.romanji ??
-                    entry.episode.title.native ??
-                    entry.episode.id
-                  }
+                  subtitle={historyEntryLabel(entry)}
                   onClick={() => {
                     resumeHistoryEntry(entry);
                   }}
                   totalDurationMs={entry.totalDurationMs}
                   currentDurationMs={entry.currentDurationMs}
+                  onRemove={() => {
+                    void removeRecentlyWatched(entry.id);
+                  }}
+                  removeLabel={`Remove ${historyEntryLabel(entry)} from Continue watching`}
                 />
               ))}
             </HorizontalCarousel>
