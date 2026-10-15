@@ -36,9 +36,20 @@ export function hianimeSlug(providerId: string): string {
 /**
  * Trailing numeric catalog id used by `/api/theme/episode/list/{id}`.
  * `steinsgate-0-2640` → `2640` (not the first hyphen suffix).
+ *
+ * A leading numeric segment means this is another provider's id (AnimeUnity
+ * publishes `{numericId}-{slug}`, e.g. `6722-dan-da-dan-2`). Without this guard
+ * the trailing-number rule would read that id as catalog `2` and quietly look up
+ * a completely different anime, which surfaced much later as a confusing
+ * "episode not found". Failing loudly here names the real problem.
  */
 export function hianimeAnimeId(providerId: string): string {
   const slug = hianimeSlug(providerId);
+  if (/^\d+-/.test(slug)) {
+    throw new Error(
+      `HiAnime provider id looks like another provider's id (leading numeric segment): ${providerId}`
+    );
+  }
   const match = /-(\d+)$/.exec(slug);
   if (!match?.[1]) {
     throw new Error(`Invalid HiAnime provider id: ${providerId}`);

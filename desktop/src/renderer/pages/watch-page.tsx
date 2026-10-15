@@ -147,6 +147,31 @@ interface WatchState {
   providerOverride?: HistoryEntry["provider"];
 }
 
+/**
+ * Does this provider id look like it was produced by that provider?
+ *
+ * Provider ids are not portable, and the two active native providers use
+ * different, non-overlapping shapes:
+ *
+ *  - AnimeUnity: `{numericId}-{slug}` — a **leading** numeric segment.
+ *  - HiAnime:   a bare slug whose catalog id is the **trailing** number
+ *               (`steinsgate-872`), or a bare slug with no number at all.
+ *
+ * So a leading numeric segment identifies an AnimeUnity id, and its absence is
+ * what HiAnime expects. This is a shape check rather than a record of which host
+ * wrote the entry, because the route only carries the id, not its origin —
+ * `Episode` has no `provider` field. It is deliberately conservative: anything
+ * ambiguous is treated as belonging to the provider, so the lookup only happens
+ * when the mismatch is unambiguous.
+ */
+function providerIdBelongsToProvider(providerId: string, provider: string): boolean {
+  const looksAnimeUnity = /^\d+-/.test(providerId.trim());
+  if (provider === "animeunity") return looksAnimeUnity;
+  if (provider === "hianime") return !looksAnimeUnity;
+  // Unknown host: assume the id is valid for it rather than forcing a re-search.
+  return true;
+}
+
 export function WatchPage() {
   const location = useLocation();
   const goBack = useGoBack();
@@ -690,18 +715,109 @@ export function WatchPage() {
     setPlaybackMode(episode.mode);
   }, [episode?.id, episode?.providerId, episode?.index, episode?.mode]);
 
+  /**
+   * Look a show up on a specific host and return its id **on that host**.
+   *
+   * Provider ids are host-specific (HiAnime uses a trailing-number slug,
+   * AnimeUnity uses `{id}-{slug}`), so an id remembered from one host is
+   * meaningless to another — HiAnime would read the trailing `-2` of an
+   * AnimeUnity id as catalog id 2 and then report "episode not found". The match
+   * is made on the AniList id when the result exposes one (`episode.id`), which
+   * is stable across hosts; otherwise the first hit is used, mirroring
+   * `resolveProviderForAniListMedia`.
+   */
+  const resolveShowOnProvider = useCallback(
+    async (
+      targetProvider: HistoryEntry["provider"],
+      title: string | null
+    ): Promise<{ providerId: string; provider: HistoryEntry["provider"] } | null> => {
+      if (!title) return null;
+      const results = await window.streamProvider.search(title, undefined, targetProvider);
+      const wantedId = episode?.id != null ? String(episode.id) : null;
+      const match =
+        (wantedId ? results.find((r) => r.id === wantedId) : null) ?? results[0] ?? null;
+      if (!match) return null;
+      return { providerId: match.providerId, provider: targetProvider };
+    },
+    [episode?.id]
+  );
+
+  /**
+   * Best available show title for a cross-host lookup. `showDetails` is the
+   * richest source but is only populated after a successful load, so the route
+   * episode is the fallback on a cold open.
+   */
+  const showTitleForLookup = useMemo(
+    () =>
+      showDetails?.title.english ??
+      showDetails?.title.romaji ??
+      episode?.title.english ??
+      episode?.title.romanji ??
+      episode?.title.native ??
+      null,
+    [showDetails, episode]
+  );
+
+  /**
+   * Guarantees the initial load runs exactly once per route episode.
+   *
+   * The cross-host repair below mutates state (`resolvedProviderId`,
+   * `historyProviderRef`) that also feeds this effect's dependencies, so without
+   * a latch the effect could re-enter and load the stream twice.
+   */
+  const didInitialLoadRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!episode || disabledHistoryProvider) return;
+
+    const loadKey = `${episode.id}:${episode.index}:${episode.mode}`;
+    if (didInitialLoadRef.current === loadKey) return;
+    didInitialLoadRef.current = loadKey;
+
     const resumeFrom = resumeFromMs != null && resumeFromMs > 0 ? resumeFromMs / 1000 : undefined;
-    void loadStream(String(episode.index), resumeFrom != null ? { resumeFrom } : undefined);
+
+    /**
+     * A history entry carries `episode.providerId` from the host that recorded
+     * it. When the user resumes onto a *different* host, that id is foreign to
+     * the active provider and must not be sent to it: HiAnime misreads
+     * AnimeUnity's `{id}-{slug}` as catalog id 2 and reports "episode not found",
+     * and the same failure leaves `playUrl` empty so the Host picker locks,
+     * forcing a trip to Settings. Provider ids are never portable, so look the
+     * show up on the target host first.
+     */
+    const storedId = state?.episode?.providerId ?? null;
+    const targetProvider = historyProviderOverride ?? streamProviderOverrideRef.current;
+    const needsCrossHostLookup =
+      historyProviderOverride != null &&
+      storedId != null &&
+      !providerIdBelongsToProvider(storedId, historyProviderOverride);
+
+    if (!needsCrossHostLookup) {
+      void loadStream(String(episode.index), resumeFrom != null ? { resumeFrom } : undefined);
+      return;
+    }
+
+    void (async () => {
+      const resolved = await resolveShowOnProvider(historyProviderOverride, showTitleForLookup);
+      if (resolved) {
+        resolvedProviderIdRef.current = resolved.providerId;
+        setResolvedProviderId(resolved.providerId);
+      }
+      await loadStream(String(episode.index), {
+        ...(resumeFrom != null ? { resumeFrom } : {}),
+        ...(resolved ? { providerId: resolved.providerId } : {}),
+        provider: targetProvider ?? historyProviderOverride,
+      });
+    })();
   }, [
     disabledHistoryProvider,
-    episode?.id,
-    episode?.providerId,
-    episode?.index,
-    episode?.mode,
+    episode,
+    historyProviderOverride,
     loadStream,
+    resolveShowOnProvider,
     resumeFromMs,
+    showTitleForLookup,
+    state?.episode?.providerId,
   ]);
 
   useEffect(() => {
@@ -885,29 +1001,13 @@ export function WatchPage() {
         const resumeFrom = videoRef.current?.currentTime ?? null;
 
         try {
-          const title = showDetails?.title.english ?? showDetails?.title.romaji ?? null;
-          const fallbackTitle =
-            title ??
-            episode?.title.english ??
-            episode?.title.romanji ??
-            episode?.title.native ??
-            null;
-
-          if (!fallbackTitle) {
+          if (!showTitleForLookup) {
             setError("Cannot switch host: the show title is unknown.");
             return;
           }
 
-          const results = await window.streamProvider.search(
-            fallbackTitle,
-            undefined,
-            nextProvider
-          );
-          const wantedId = episode?.id != null ? String(episode.id) : null;
-          const match =
-            (wantedId ? results.find((r) => r.id === wantedId) : null) ?? results[0] ?? null;
-
-          if (!match) {
+          const resolved = await resolveShowOnProvider(nextProvider, showTitleForLookup);
+          if (!resolved) {
             setError(
               `This show is not available on the selected host. Try another one from the Host menu.`
             );
@@ -916,15 +1016,15 @@ export function WatchPage() {
 
           // Update the mirrors immediately: the reload below reads them for any
           // follow-up work (quality change, reconnect) before React re-renders.
-          resolvedProviderIdRef.current = match.providerId;
+          resolvedProviderIdRef.current = resolved.providerId;
           streamProviderOverrideRef.current = nextProvider;
-          setResolvedProviderId(match.providerId);
+          setResolvedProviderId(resolved.providerId);
           setStreamProviderOverride(nextProvider);
 
           await loadStream(String(currentEpisode), {
             mode: playbackModeRef.current,
             resumeFrom: resumeFrom != null && resumeFrom > 0 ? resumeFrom : null,
-            providerId: match.providerId,
+            providerId: resolved.providerId,
             provider: nextProvider,
           });
         } catch (err) {
@@ -936,9 +1036,9 @@ export function WatchPage() {
     },
     [
       currentEpisode,
-      episode,
       loadStream,
-      showDetails,
+      resolveShowOnProvider,
+      showTitleForLookup,
       streamProviderOverride,
     ]
   );
@@ -1083,6 +1183,18 @@ export function WatchPage() {
           availableHosts={availableHosts}
           currentHost={currentHostName}
           switchingHost={switchingProvider}
+          /*
+           * Keep the Host picker reachable after a failed load. Without this the
+           * only way out of a broken source was to go back to Settings, because
+           * the picker was disabled while `playUrl` was still empty.
+           */
+          canSwitchHost={Boolean(error) || Boolean(playbackError)}
+          /*
+           * AnimeUnity ships Japanese audio with Italian subtitles already burned
+           * into the video, so it reports no selectable track. Naming that case
+           * lets the subtitle panel explain itself rather than appear broken.
+           */
+          hardcodedSubtitles={currentHostName === "animeunity" && subtitleTracks.length === 0}
           onHostSelect={handleProviderSwitch}
           onBack={goBack}
           onQualitySelect={onQualitySelect}

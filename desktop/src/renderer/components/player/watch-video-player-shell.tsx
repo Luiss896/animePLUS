@@ -1,7 +1,13 @@
 import { ArrowLeft, Loader2, Monitor, RefreshCw, Server, Sparkles, TriangleAlert } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/renderer/lib/utils";
+import {
+  readSubtitlePreferences,
+  subtitleCueVariables,
+  writeSubtitlePreferences,
+  type SubtitlePreferences,
+} from "@/renderer/helpers/player/subtitle-preferences";
 import {
   DEFAULT_OUTPUT_RESOLUTION_ID,
   OUTPUT_RESOLUTIONS,
@@ -16,6 +22,7 @@ import {
 } from "@/shared/shader-presets";
 
 import { Anime4kShaderOverlay, type Anime4kShaderStatus } from "./anime4k-shader-overlay";
+import { SubtitlePanel } from "./subtitle-panel";
 import { VideoJsReactPlayer, type PlayerSubtitleTrack } from "./videojs-react-player";
 import { Button } from "../ui/button";
 import {
@@ -34,8 +41,6 @@ const watchSelectContentClass =
 
 const watchSelectItemClass =
   "rounded-lg py-2 pl-8 pr-2 text-white/95 cursor-pointer focus:bg-white/[0.14] focus:text-white data-[highlighted]:bg-white/[0.14] data-[highlighted]:text-white data-[state=checked]:bg-white/[0.08]";
-
-const SUBTITLES_OFF_VALUE = "__off__";
 
 const SHADER_LABELS: Record<ShaderPresetId, string> = SHADER_PRESET_IDS.reduce(
   (acc, id) => {
@@ -66,6 +71,12 @@ interface WatchVideoPlayerShellProps {
   currentEpisode: number;
   videoRef: React.RefObject<HTMLVideoElement>;
   subtitleTracks?: PlayerSubtitleTrack[];
+  /**
+   * True when the current source burns subtitles into the video and therefore
+   * offers no selectable track (AnimeUnity publishes Italian subs this way).
+   * The panel then explains why nothing can be toggled.
+   */
+  hardcodedSubtitles?: boolean;
   streamQualities?: Array<{ id: string; label: string }>;
   selectedQuality?: string | null;
   /** Warn when no 1080p rendition exists upstream, or when none could be probed. */
@@ -76,6 +87,12 @@ interface WatchVideoPlayerShellProps {
   currentHost?: string | null;
   /** True while a host switch is resolving the show on the new source. */
   switchingHost?: boolean;
+  /**
+   * Keep the Host picker usable even though no stream loaded. Without this, a
+   * failed load left the picker disabled and the user had to go back to
+   * Settings to escape a broken source.
+   */
+  canSwitchHost?: boolean;
   onHostSelect?: (providerId: string) => void;
   onBack: () => void;
   onQualitySelect?: (qualityId: string) => void;
@@ -103,12 +120,14 @@ export function WatchVideoPlayerShell({
   currentEpisode,
   videoRef,
   subtitleTracks,
+  hardcodedSubtitles,
   streamQualities,
   selectedQuality,
   qualityWarning,
   availableHosts,
   currentHost,
   switchingHost,
+  canSwitchHost,
   onHostSelect,
   onBack,
   onQualitySelect,
@@ -134,6 +153,22 @@ export function WatchVideoPlayerShell({
     DEFAULT_OUTPUT_RESOLUTION_ID
   );
   const [shaderStatus, setShaderStatus] = useState<Anime4kShaderStatus>({ kind: "idle" });
+
+  /*
+   * Subtitle appearance lives here rather than in the watch page because it is
+   * purely presentational: the values are written as CSS custom properties that
+   * `.oa-cue-scope video::cue` reads. They persist across sessions via
+   * localStorage, so the styling is chosen once and then simply applies.
+   */
+  const [subtitlePreferences, setSubtitlePreferences] = useState<SubtitlePreferences>(() =>
+    readSubtitlePreferences()
+  );
+
+  useEffect(() => {
+    writeSubtitlePreferences(subtitlePreferences);
+  }, [subtitlePreferences]);
+
+  const cueVariables = useMemo(() => subtitleCueVariables(subtitlePreferences), [subtitlePreferences]);
 
   useEffect(() => {
     // A new stream means the old pipeline is gone; reset the reported status so
@@ -269,7 +304,9 @@ export function WatchVideoPlayerShell({
   return (
     <div
       ref={shellRef}
-      className="relative flex flex-1 flex-col min-h-0 h-full w-full bg-black overflow-visible"
+      /* `oa-cue-scope` carries the cue custom properties into `video::cue`. */
+      className="oa-cue-scope relative flex flex-1 flex-col min-h-0 h-full w-full bg-black overflow-visible"
+      style={cueVariables as React.CSSProperties}
     >
       <div className="absolute inset-0 z-0 flex items-center justify-center min-h-0">
         {loadingEpisode && !playUrl ? (
@@ -419,7 +456,13 @@ export function WatchVideoPlayerShell({
                 onHostSelect(value);
               }}
               onOpenChange={setIsHostSelectOpen}
-              disabled={loadingEpisode || switchingHost || !playUrl}
+              /*
+               * `!playUrl` alone would lock the picker exactly when it is most
+               * needed: a failed first load leaves `playUrl` empty, and Host is
+               * the only in-page way to recover onto a source that has the
+               * episode. Keep it enabled while there is an error to escape from.
+               */
+              disabled={loadingEpisode || switchingHost || (!playUrl && !canSwitchHost)}
             >
               <SelectTrigger
                 className={cn(watchSelectTriggerClass, "w-[152px]")}
@@ -533,34 +576,23 @@ export function WatchVideoPlayerShell({
               </SelectContent>
             </Select>
           ) : null}
-          {subtitleTracks && subtitleTracks.length > 0 ? (
-            <Select
-              value={activeSubtitleLabel ?? SUBTITLES_OFF_VALUE}
-              onValueChange={(value) => {
-                setActiveSubtitleLabel(value === SUBTITLES_OFF_VALUE ? null : value);
-              }}
-              onOpenChange={setIsSubtitleSelectOpen}
-              disabled={loadingEpisode || !playUrl}
-            >
-              <SelectTrigger className={watchSelectTriggerClass}>
-                <SelectValue placeholder="Subtitles" />
-              </SelectTrigger>
-              <SelectContent className={watchSelectContentClass}>
-                <SelectItem value={SUBTITLES_OFF_VALUE} className={watchSelectItemClass}>
-                  Subtitles off
-                </SelectItem>
-                {subtitleTracks.map((track) => (
-                  <SelectItem
-                    key={`${track.srclang}:${track.label}`}
-                    value={track.label}
-                    className={watchSelectItemClass}
-                  >
-                    {track.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
+          {/*
+            Always rendered, unlike the old Select which only appeared when the
+            source shipped a track. Hosts that burn subtitles into the video
+            (AnimeUnity) now get an explanatory panel instead of no control at
+            all, which is what made the feature look absent.
+          */}
+          <SubtitlePanel
+            tracks={subtitleTracks ?? []}
+            activeLabel={activeSubtitleLabel}
+            onSelectTrack={setActiveSubtitleLabel}
+            preferences={subtitlePreferences}
+            onPreferencesChange={setSubtitlePreferences}
+            hardcodedOnly={hardcodedSubtitles}
+            disabled={loadingEpisode || !playUrl}
+            /* Keeps the control bar from auto-hiding while the panel is open. */
+            onOpenChange={setIsSubtitleSelectOpen}
+          />
         </div>
       </div>
 
