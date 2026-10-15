@@ -415,14 +415,32 @@ export class ReanimeStreamProvider implements StreamProvider {
           const master = await fetchReanimePlaylistText(decrypted.url, FLIXCLOUD_REFERER);
           const variants = parseHlsVideoVariants(master);
           if (variants.length > 0) {
+            /*
+             * Resolve each variant URI against the master URL.
+             *
+             * Flixcloud writes variants as **relative** paths
+             * (`../Axngl.../video.m3u8`). The quality id is later passed to the
+             * transcode proxy as a `variant` query parameter, where ffmpeg must
+             * fetch it directly — and ffmpeg cannot resolve `../` against the
+             * local proxy URL, so it aborted with "Invalid argument" and
+             * "Output file is empty, nothing was encoded". AnimeUnity already
+             * returns absolute variant URLs, which is why only reanime broke.
+             */
+            const absoluteUri = (uri: string): string => {
+              try {
+                return new URL(uri, decrypted.url).toString();
+              } catch {
+                return uri;
+              }
+            };
             const preferred = pickPreferredHlsVariant(variants);
             qualities = sortHlsVariantsDescending(variants).map((v) => ({
-              id: v.uri,
+              id: absoluteUri(v.uri),
               label: v.label,
               height: v.height ?? undefined,
               bandwidth: v.bandwidth ?? undefined,
             }));
-            selectedQuality = preferred?.uri;
+            selectedQuality = preferred ? absoluteUri(preferred.uri) : undefined;
           }
         } catch (qualityError: unknown) {
           this.log("stream:qualities-failed", {
