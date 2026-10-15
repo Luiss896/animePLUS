@@ -30,17 +30,20 @@ and instantiated regardless, so enabling or disabling is a one-line change.
 
 | Source | Status | Notes |
 |---|---|---|
-| **HiAnime** | Enabled | Primary. Reports a full quality ladder, so the quality selector and the 1080p warning are meaningful. The source most likely to carry subtitles, including Italian on some titles. |
+| **HiAnime** | Enabled | Primary. Reports a full quality ladder, so the quality selector and the 1080p warning are meaningful. The only enabled source that carries selectable subtitles, including Italian on some titles. |
 | **AnimeUnity** | Enabled | Italian fallback. Japanese audio with **Italian subtitles burned into the video**, so they cannot be toggled — the subtitle panel says so rather than showing dead controls. |
-| **Reanime** | Enabled | Subtitle fallback. Many tracks per show (3–14) in `.ass`, which the local proxy converts to WebVTT on the fly. Adds Italian titles HiAnime lacks. |
+| Reanime | Disabled | Subtitles work (many `.ass` tracks per show, converted to WebVTT on the fly), but it **cannot play video**: every playlist its CDN serves contains image segments (WebP/PNG), not video. See below. |
 | AllAnime | Disabled | Upstream broke: the `episode` query now requires `translationType`, and its request-signing crypto must be scraped from an obfuscated bundle. |
 | AnimeParadise | Disabled | Works, but carries no subtitle tracks at all. |
 | AniDB, AnimePahe, Senshi | Disabled | Search currently fails or returns nothing. |
 
+> **On Reanime:** its master playlist advertises `CODECS="avc1.64001f,mp4a.40.2"` but every
+> segment it serves is an image — measured across four shows by reading the segment magic bytes
+> (`RIFF....WEBP`, `image/png`). Nothing in the app can play that, so the source is off.
+
 > **On Italian subtitles:** no free source carries them for every title. Coverage was measured
-> across 15 popular shows — HiAnime had a working Italian track on 4, Reanime on 2, and between
-> them they cover the available titles. If a show has no Italian track, switch host from the
-> player and check again.
+> across 15 popular shows — HiAnime had a working Italian track on 4, Reanime on 2 (but see
+> above). If a show has no Italian track, switch host from the player and check again.
 
 ## Installation
 

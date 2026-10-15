@@ -17,12 +17,22 @@
  *   the live site (search -> episode list -> embed -> HLS master carrying the
  *   1080p rendition, with segments downloadable through the local proxy).
  *
- * - `reanime` — SUBTITLE FALLBACK. Plain JSON API over HTTPS, no crypto handshake
- *   for search/episodes. Publishes many subtitle tracks per show (3–14) in `.ass`
- *   format, which browsers cannot render in a `<track>`; the stream proxy
- *   converts it to WebVTT on the fly. Verified end-to-end: an Italian track came
- *   back as `text/vtt; charset=utf-8` and loaded as a real text track
- *   (`readyState 2`, 402 cues).
+ * - `reanime` — DISABLED. Search, episode lists and subtitle tracks all work, and
+ *   its subtitle conversion is verified, BUT it cannot play video: every playlist
+ *   flixcloud serves contains **image** segments, never video. Measured by
+ *   fetching a segment and reading its magic bytes for four shows (DAN DA DAN,
+ *   Naruto, ONE PIECE, Jujutsu Kaisen):
+ *
+ *     video.m3u8          → Content-Type image/webp, body starts `RIFF....WEBP`
+ *     audio/native.m3u8   → image/webp
+ *     audio/english.m3u8  → image/png
+ *
+ *   ffmpeg reported this correctly all along (`Video: png` / `Video: webp`,
+ *   "Output file is empty, nothing was encoded"); the master even advertises
+ *   CODECS="avc1.64001f,mp4a.40.2" while serving images. Two genuine bugs in our
+ *   own code were found and fixed on the way (playlist decryption keyed by the
+ *   wrong id, and relative variant URIs handed to ffmpeg), so the remaining
+ *   blocker is purely upstream.
  *
  * - `animeparadise` — DISABLED. It works technically (plain GET JSON API, HLS
  *   master with a 1080p/720p/480p ladder) but carries **no subtitle tracks at
@@ -59,15 +69,15 @@
  *   reanime  — 3 to 14 tracks; an Italian track on 2/15 (DAN DA DAN 402 cues,
  *              Spy x Family 655). Serves `.ass`, which browsers cannot parse in a
  *              `<track>`; the proxy converts it, verified at `readyState 2` with
- *              402 cues loaded. It complements HiAnime rather than replacing it:
- *              Spy x Family has Italian here and not on HiAnime.
+ *              402 cues loaded. Subtitle delivery works — but the provider is
+ *              disabled because its video does not (see above).
  *   animeunity — 0 tracks on every title (subtitles are burned into the video).
  *   anidb      — search returns 0 results.
  *   animepahe  — search throws "returned invalid JSON".
  *   senshi     — search throws "fetch failed".
  *
- * So HiAnime and ReAnime are the only two sources that deliver selectable
- * subtitles, and between them they cover the Italian titles available today.
+ * So HiAnime is the only **enabled** source that delivers selectable subtitles,
+ * and the only one that plays video and carries Italian tracks on some titles.
  *
  * The remaining four stay disabled: they are compiled and instantiated anyway
  * (see `stream-providers.ts`), so re-enabling one is a one-line change here.
@@ -79,6 +89,6 @@ export const streamProviderAvailability = {
   anidb: false,
   animepahe: false,
   animeparadise: false,
-  reanime: true,
+  reanime: false,
   senshi: false,
 } as const;
