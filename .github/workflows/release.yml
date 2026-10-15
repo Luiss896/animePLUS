@@ -9,7 +9,14 @@ jobs:
   release:
     runs-on: ${{ matrix.os }}
 
+    permissions:
+      # Required for `npm run publish` to create the release and upload assets.
+      contents: write
+
     strategy:
+      # One platform failing must not cancel the others: a Linux-only problem
+      # previously cancelled Windows and macOS before they produced anything.
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
 
@@ -20,7 +27,17 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          # 20 matches what the project builds against locally; 18 also worked
+          # for Forge but is past end-of-life.
+          node-version: 20
+
+      # MakerDeb shells out to `dpkg` and `fakeroot` (declared as
+      # requiredExternalBinaries), which ubuntu-latest does not ship. Without
+      # this the Linux job fails and, before fail-fast was disabled, took the
+      # other two platforms down with it.
+      - name: Install Linux packaging tools
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y dpkg fakeroot rpm
 
       - name: Install dependencies
         run: npm ci

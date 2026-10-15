@@ -3,6 +3,14 @@
   "productName": "animePLUS",
   "version": "1.0.0",
   "description": "animePLUS — an easy to use anime desktop app with a provider-based architecture, combining a familiar streaming workflow with a modern UI. Includes Anime4K WebGPU upscaling.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Luiss896/animePLUS.git"
+  },
+  "author": {
+    "name": "Luiss896"
+  },
+  "license": "AGPL-3.0-or-later",
   "main": ".vite/build/main.js",
   "scripts": {
     "postinstall": "node ./scripts/download-ffmpeg.mjs",
@@ -87,5 +95,14 @@
   },
   "allowScripts": {
     "electron@31.3.0": true
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "Luiss896",
+    "repo": "animePLUS",
+    "release": {
+      "draft": false,
+      "prerelease": false
+    }
   }
 }
