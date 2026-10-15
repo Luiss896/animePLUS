@@ -1,5 +1,7 @@
 import Store from "electron-store";
 
+import type { StreamProviderName } from "@/shared/stream-providers";
+
 interface AppStoreSchema {
   "anilist.accessToken"?: string;
   /**
@@ -9,14 +11,12 @@ interface AppStoreSchema {
    */
   "anilist.autoAddSequels"?: boolean;
   "privacy.incognito"?: boolean;
-  "stream.provider"?:
-    | "hianime"
-    | "allanime"
-    | "anidb"
-    | "animepahe"
-    | "animeparadise"
-    | "reanime"
-    | "senshi";
+  /**
+   * Derived from the provider registry rather than a hand-written union: this
+   * list had already drifted (it was missing `animeunity`), and a stale member
+   * list silently accepts or rejects the wrong names.
+   */
+  "stream.provider"?: StreamProviderName;
 }
 
 type StoreApi = {

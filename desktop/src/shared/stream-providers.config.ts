@@ -9,11 +9,6 @@
  *   with the quality ladder confirmed at both 1920x1080 and 1422x800 depending
  *   on the episode. It also reports a full `qualities` list, which is what makes
  *   the player quality selector (and the 1080p warning) meaningful.
- * - `allanime` — FALLBACK. Also verified working (search returns HTTP 200 with a
- *   full catalogue in ~190 ms), and it is the only provider that already picks
- *   the highest rendition on its own. Kept enabled deliberately as redundancy:
- *   these sites break regularly, and a single-provider setup means the app is
- *   dead the moment its one upstream changes markup or blocks the CDN.
  *
  * - `animeunity` — ITALIAN SUB FALLBACK. Enabled because the other sources do not
  *   guarantee Italian subtitles for every episode. It publishes two entries per
@@ -22,16 +17,68 @@
  *   the live site (search -> episode list -> embed -> HLS master carrying the
  *   1080p rendition, with segments downloadable through the local proxy).
  *
- * The remaining five stay disabled: they are compiled and instantiated anyway
+ * - `reanime` — SUBTITLE FALLBACK. Plain JSON API over HTTPS, no crypto handshake
+ *   for search/episodes. Publishes many subtitle tracks per show (3–14) in `.ass`
+ *   format, which browsers cannot render in a `<track>`; the stream proxy
+ *   converts it to WebVTT on the fly. Verified end-to-end: an Italian track came
+ *   back as `text/vtt; charset=utf-8` and loaded as a real text track
+ *   (`readyState 2`, 402 cues).
+ *
+ * - `animeparadise` — DISABLED. It works technically (plain GET JSON API, HLS
+ *   master with a 1080p/720p/480p ladder) but carries **no subtitle tracks at
+ *   all**, and its raw API has no subtitle field. Italian subtitles are the main
+ *   reason to fall back to a second source, so a provider without them adds a
+ *   host to the menu and nothing else.
+ *
+ * `allanime` is DISABLED because its upstream broke in two ways at once
+ * (verified against the live API, not inferred):
+ *
+ *   1. The `episode` query now requires a `translationType` argument. Without it
+ *      the API answers `400 Bad Request` — which is the error the user saw.
+ *      Adding it yields HTTP 200 but the body reports `AA_CRYPTO_MISSING`.
+ *   2. That crypto (`aaReq`) must be extracted from the site's JS, and AllAnime
+ *      has since obfuscated the bundle: the `__aaCrypto` marker is gone, no
+ *      64-hex mask is present, and `graceMs` was removed. The app logs
+ *      "could not fetch aaReq crypto, using fallback values" and is rejected.
+ *
+ * Search and details still work on allanime (they use the `shows` query, which
+ * needs no crypto), so only streaming is affected. Re-enabling it is one line
+ * here, but it will stay broken until the obfuscated crypto extraction is
+ * reimplemented — a fragile job that breaks again on every upstream rebuild.
+ *
+ * ── Subtitle reality, measured across 15 popular titles ──────────────────────
+ *
+ * Italian subtitles are scarce on every source. Each provider below was tested
+ * through the app's own `/stream` proxy — fetching subtitle URLs directly gives
+ * a false negative, because the proxy is what rewrites `Content-Type` and
+ * converts `.ass` to WebVTT (see `utils/ass-to-webvtt.ts`).
+ *
+ *   hianime  — 1 to 18 tracks per title; a **working Italian VTT on 4/15** titles
+ *              (DAN DA DAN 356 cues, Chainsaw Man 218, Vinland Saga 533, Mob
+ *              Psycho 100 421). Serves `.vtt` directly.
+ *   reanime  — 3 to 14 tracks; an Italian track on 2/15 (DAN DA DAN 402 cues,
+ *              Spy x Family 655). Serves `.ass`, which browsers cannot parse in a
+ *              `<track>`; the proxy converts it, verified at `readyState 2` with
+ *              402 cues loaded. It complements HiAnime rather than replacing it:
+ *              Spy x Family has Italian here and not on HiAnime.
+ *   animeunity — 0 tracks on every title (subtitles are burned into the video).
+ *   anidb      — search returns 0 results.
+ *   animepahe  — search throws "returned invalid JSON".
+ *   senshi     — search throws "fetch failed".
+ *
+ * So HiAnime and ReAnime are the only two sources that deliver selectable
+ * subtitles, and between them they cover the Italian titles available today.
+ *
+ * The remaining four stay disabled: they are compiled and instantiated anyway
  * (see `stream-providers.ts`), so re-enabling one is a one-line change here.
  */
 export const streamProviderAvailability = {
   hianime: true,
-  allanime: true,
+  allanime: false,
   animeunity: true,
   anidb: false,
   animepahe: false,
   animeparadise: false,
-  reanime: false,
+  reanime: true,
   senshi: false,
 } as const;
