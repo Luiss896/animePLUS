@@ -173,7 +173,11 @@ function AiringCard({ show, index }: { show: AiringShow; index: number }) {
           )}
         </p>
 
-        {!show.isBeingWatched ? (
+        {show.isOnList === false ? (
+          <Badge variant="secondary" className="w-fit text-[10px]">
+            New season
+          </Badge>
+        ) : !show.isBeingWatched ? (
           <Badge variant="secondary" className="w-fit text-[10px]">
             On your list
           </Badge>

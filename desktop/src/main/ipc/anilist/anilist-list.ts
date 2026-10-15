@@ -84,6 +84,16 @@ interface AniListPageInfo {
   hasNextPage?: boolean | null;
 }
 
+/**
+ * `AniListPageInfo` extended with the read outcome, so callers can tell a
+ * complete list from one that hit the ceiling.
+ */
+interface AniListListReadInfo extends AniListPageInfo {
+  truncated: boolean;
+  entriesRead: number;
+  uniqueMediaRead: number;
+}
+
 interface AniListListEntryRaw {
   id: number;
   status?: string | null;
@@ -146,26 +156,100 @@ function todayFuzzyDate(): AniListFuzzyDate {
   };
 }
 
+/**
+ * AniList caps `perPage` at 50 for list connections.
+ */
+const MEDIA_LIST_PAGE_SIZE = 50;
+
+/**
+ * How many entries a single status list is read up to.
+ *
+ * The loop stops here and reports it through `pageInfo.truncated` instead of
+ * pretending the list ended, so a genuinely oversized list is visible rather
+ * than silently short.
+ */
+const MEDIA_LIST_MAX_ENTRIES = 2000;
+
+export interface AniListMediaListResult {
+  entries: AniListListEntry[];
+  pageInfo: AniListListReadInfo;
+}
+
+/**
+ * Reads a status list to the end.
+ *
+ * Bookmark tabs used to render page 1 only: a single request with `perPage: 50`
+ * and no follow-up, so on any list longer than 50 entries everything past the
+ * 50th — sorted by `UPDATED_TIME_DESC`, i.e. the most recently touched shows,
+ * including a freshly added new season — was dropped without a trace. `page` is
+ * still accepted so existing callers keep working, but it now only seeds the
+ * first page of the walk.
+ */
 export async function fetchAniListMediaList(
   status: AniListMediaListStatus,
   page = 1,
-  perPage = 50
-): Promise<{ entries: AniListListEntry[]; pageInfo: AniListPageInfo }> {
+  perPage = MEDIA_LIST_PAGE_SIZE
+): Promise<AniListMediaListResult> {
   const userId = await getAniListViewerId();
-  const data = await postAniListAuthedGraphql<{
-    Page?: {
-      pageInfo?: AniListPageInfo;
-      mediaList?: (AniListListEntryRaw | null)[] | null;
-    } | null;
-  }>(MEDIA_LIST_PAGE_QUERY, { userId, status, page, perPage });
+  const pageSize = Math.min(Math.max(perPage, 1), MEDIA_LIST_PAGE_SIZE);
 
-  const pageInfo = data.Page?.pageInfo ?? {};
-  const entries = (data.Page?.mediaList ?? [])
-    .filter((e): e is AniListListEntryRaw => e != null)
-    .map(mapListEntry)
-    .filter((e): e is AniListListEntry => e != null);
+  const entries: AniListListEntry[] = [];
+  const seenEntryIds = new Set<number>();
+  const seenMediaIds = new Set<number>();
+  let currentPage = Math.max(page, 1);
+  let truncated = false;
+  let lastPageInfo: AniListPageInfo = {};
 
-  return { entries, pageInfo };
+  for (;;) {
+    const data = await postAniListAuthedGraphql<{
+      Page?: {
+        pageInfo?: AniListPageInfo;
+        mediaList?: (AniListListEntryRaw | null)[] | null;
+      } | null;
+    }>(MEDIA_LIST_PAGE_QUERY, { userId, status, page: currentPage, perPage: pageSize });
+
+    const raw = data.Page?.mediaList ?? [];
+    lastPageInfo = data.Page?.pageInfo ?? {};
+
+    // An empty page is the real terminator. Without this, exhausting the list
+    // on an exact multiple of the page size would keep requesting next pages.
+    if (raw.length === 0) break;
+
+    for (const item of raw) {
+      if (item == null) continue;
+      const entry = mapListEntry(item);
+      if (!entry) continue;
+      // Guard against double-counting if AniList shifts the window between
+      // requests while the list is being re-sorted.
+      if (seenEntryIds.has(entry.id)) continue;
+      seenEntryIds.add(entry.id);
+      seenMediaIds.add(entry.media.id);
+      entries.push(entry);
+    }
+
+    if (!lastPageInfo.hasNextPage) break;
+    if (entries.length >= MEDIA_LIST_MAX_ENTRIES) {
+      truncated = true;
+      break;
+    }
+    if (typeof lastPageInfo.lastPage === "number" && currentPage >= lastPageInfo.lastPage) break;
+
+    currentPage += 1;
+  }
+
+  return {
+    entries,
+    pageInfo: {
+      ...lastPageInfo,
+      currentPage: page,
+      perPage: pageSize,
+      hasNextPage: truncated,
+      truncated,
+      total: lastPageInfo.total ?? entries.length,
+      entriesRead: entries.length,
+      uniqueMediaRead: seenMediaIds.size,
+    },
+  };
 }
 
 export async function saveAniListMediaListEntry(

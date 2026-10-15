@@ -81,6 +81,14 @@ export interface AiringShow {
    * are simply airing but only "planned" are marked false and shown de-emphasised.
    */
   isBeingWatched: boolean;
+  /**
+   * True when this show is an entry on the user's own list. False for an airing
+   * sequel discovered through relations, which is not on the list at all.
+   *
+   * Distinct from `isBeingWatched`: a PLANNING show is on the list but not being
+   * watched, while a related airing sequel is neither.
+   */
+  isOnList?: boolean;
 }
 
 export type UpcomingSeasonsResult =

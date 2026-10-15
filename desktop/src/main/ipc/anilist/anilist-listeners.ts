@@ -51,7 +51,19 @@ import { getAniListPopularSeasonAnime } from "./anilist-popular-season";
 import { searchAniListMedia } from "./anilist-search";
 import { getAniListShowDetails } from "./anilist-show-details";
 import { getAniListViewerId } from "./anilist-authed-api";
-import { fetchUpcomingSeasons } from "./anilist-upcoming-seasons";
+import { clearUpcomingSeasonsCache, fetchUpcomingSeasons } from "./anilist-upcoming-seasons";
+
+/**
+ * Drops the cached Following result after anything that changes the user's list.
+ *
+ * The cache lives for 30 minutes, so without this a show added from the app — or
+ * simply watched — stayed invisible on Following until the entry expired, which
+ * reads as "the page ignores my new additions". Refresh bypassed the cache by
+ * passing `force`, but every other path showed stale data.
+ */
+function invalidateUpcomingSeasons(): void {
+  clearUpcomingSeasonsCache();
+}
 
 export function addAniListListeners() {
   ipcMain.handle(ANILIST_SHOW_DETAILS_CHANNEL, (_event, mediaId: number) =>
@@ -84,13 +96,19 @@ export function addAniListListeners() {
     fetchAniListFavourites(page ?? 1)
   );
 
-  ipcMain.handle(ANILIST_SAVE_LIST_ENTRY_CHANNEL, (_event, input: AniListSaveListEntryInput) =>
-    saveAniListMediaListEntry(input)
+  ipcMain.handle(
+    ANILIST_SAVE_LIST_ENTRY_CHANNEL,
+    async (_event, input: AniListSaveListEntryInput) => {
+      const entry = await saveAniListMediaListEntry(input);
+      invalidateUpcomingSeasons();
+      return entry;
+    }
   );
 
-  ipcMain.handle(ANILIST_DELETE_LIST_ENTRY_CHANNEL, (_event, listEntryId: number) =>
-    deleteAniListMediaListEntry(listEntryId)
-  );
+  ipcMain.handle(ANILIST_DELETE_LIST_ENTRY_CHANNEL, async (_event, listEntryId: number) => {
+    await deleteAniListMediaListEntry(listEntryId);
+    invalidateUpcomingSeasons();
+  });
 
   ipcMain.handle(ANILIST_TOGGLE_FAVOURITE_CHANNEL, (_event, mediaId: number) =>
     toggleAniListFavourite(mediaId)
@@ -98,9 +116,12 @@ export function addAniListListeners() {
 
   ipcMain.handle(
     ANILIST_SYNC_WATCH_PROGRESS_CHANNEL,
-    (_event, input: AniListSyncWatchProgressInput) => {
+    async (_event, input: AniListSyncWatchProgressInput) => {
       if (isIncognitoEnabled()) return null;
-      return syncAniListWatchProgress(input);
+      const entry = await syncAniListWatchProgress(input);
+      // Progress can move a show between statuses, which changes what is airing.
+      invalidateUpcomingSeasons();
+      return entry;
     }
   );
 
