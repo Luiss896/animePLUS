@@ -1,5 +1,6 @@
 import { AppUpdateCheckResult } from "./app-update-types";
 import type { SearchFilterDefinition, SearchFilterValues } from "./search-filters";
+import type { StreamProviderName } from "./stream-providers";
 import type { AutoAddResult, UpcomingSeasonsResult } from "./upcoming-seasons-types";
 
 interface ThemeContext {
@@ -12,14 +13,15 @@ interface ThemeContext {
 
 type StreamMode = "sub" | "dub";
 
-type StreamProvider =
-  | "hianime"
-  | "allanime"
-  | "anidb"
-  | "animepahe"
-  | "animeparadise"
-  | "reanime"
-  | "senshi";
+/**
+ * Derived from the single source of truth in `stream-providers.config.ts`.
+ *
+ * This used to be a hand-maintained union that listed every provider name a
+ * second time, so adding one produced type errors in unrelated renderer files
+ * until the list was updated by hand. Aliasing the config type removes that
+ * duplication: a new provider is now registered in one place only.
+ */
+type StreamProvider = StreamProviderName;
 
 interface Show {
   id: string;
@@ -107,6 +109,8 @@ interface StreamUrlResult {
   qualities?: StreamQualityOption[];
   selectedQuality?: string;
   anilistMediaId?: number;
+  /** True when the master is HLS but its URL carries no `.m3u8` suffix. */
+  isHlsMaster?: boolean;
 }
 
 interface TranscodeProgressResult {
@@ -309,6 +313,16 @@ export interface AniListListPageResult {
     currentPage?: number | null;
     lastPage?: number | null;
     hasNextPage?: boolean | null;
+    /**
+     * True when the list was longer than the read ceiling and `entries` stops
+     * short. Surfaced so an incomplete list is reported instead of looking
+     * complete — the old code truncated at 50 entries silently.
+     */
+    truncated?: boolean;
+    /** Entries actually returned. */
+    entriesRead?: number;
+    /** Distinct media behind those entries (a show can hold several entries). */
+    uniqueMediaRead?: number;
   };
 }
 
@@ -387,7 +401,16 @@ export interface UrlOpenerContext {
 interface StreamProviderContext {
   getActiveProvider: () => Promise<StreamProvider>;
   setActiveProvider: (provider: StreamProvider) => Promise<StreamProvider>;
-  search: (query: string, filters?: SearchFilterValues) => Promise<ShowSearchResult[]>;
+  /**
+   * `providerName` searches a specific host without changing the active one,
+   * which is what lets the player resolve a show on another host before
+   * switching to it.
+   */
+  search: (
+    query: string,
+    filters?: SearchFilterValues,
+    providerName?: StreamProvider
+  ) => Promise<ShowSearchResult[]>;
   getSearchFilters: () => Promise<SearchFilterDefinition[]>;
   getEpisodes: (
     providerId: string,

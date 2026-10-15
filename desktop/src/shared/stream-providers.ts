@@ -5,6 +5,7 @@ export type StreamProviderName = keyof typeof streamProviderAvailability;
 export const STREAM_PROVIDER_LABELS: Record<StreamProviderName, string> = {
   hianime: "HiAnime",
   allanime: "AllAnime",
+  animeunity: "AnimeUnity (sub ITA)",
   anidb: "AniDB",
   animepahe: "AnimePahe",
   animeparadise: "AnimeParadise",

@@ -10,7 +10,13 @@ import {
 import { WatchVideoPlayerShell } from "@/renderer/components/player/watch-video-player-shell";
 import { Button } from "@/renderer/components/ui/button";
 import { useGoBack } from "@/renderer/hooks/use-go-back";
-import { isHistoryProviderDisabled, DEFAULT_STREAM_PROVIDER } from "@/shared/stream-providers";
+import {
+  DEFAULT_STREAM_PROVIDER,
+  STREAM_PROVIDER_LABELS,
+  getEnabledStreamProviders,
+  isHistoryProviderDisabled,
+  type StreamProviderName,
+} from "@/shared/stream-providers";
 import type { AniListMediaListStatus, Episode, HistoryEntry } from "@/shared/types";
 import { isHlsPlaylistUrl } from "@/shared/utils/hls-url";
 
@@ -146,11 +152,80 @@ export function WatchPage() {
   const goBack = useGoBack();
   const state = location.state as WatchState | null;
   const resumeFromMs = state?.resumeFromMs;
-  const streamProviderOverride = state?.providerOverride;
+  const historyProviderOverride = state?.providerOverride;
   const disabledHistoryProvider =
-    streamProviderOverride && isHistoryProviderDisabled(streamProviderOverride)
-      ? streamProviderOverride
+    historyProviderOverride && isHistoryProviderDisabled(historyProviderOverride)
+      ? historyProviderOverride
       : null;
+
+  /**
+   * The host currently in use. Seeded from the history entry, then owned by this
+   * page so the user can change host mid-episode without navigating away — the
+   * point being to fall back to a source that carries Italian subtitles.
+   */
+  const [streamProviderOverride, setStreamProviderOverride] = useState<
+    HistoryEntry["provider"] | undefined
+  >(() => historyProviderOverride);
+
+  /**
+   * The show's id **on the current host**.
+   *
+   * Provider ids are host-specific (HiAnime uses a slug, AnimeUnity uses
+   * `{id}-{slug}`), so they cannot be carried across a host switch. This is
+   * re-resolved against the new host before the stream is reloaded.
+   */
+  const [resolvedProviderId, setResolvedProviderId] = useState<string | null>(
+    () => state?.episode?.providerId ?? null
+  );
+  /** Host switch in flight: the UI disables the picker and shows progress. */
+  const [switchingProvider, setSwitchingProvider] = useState(false);
+
+  /**
+   * Whether the current source is HLS.
+   *
+   * Kept in state because the player needs it as a prop: some hosts serve HLS
+   * from extensionless paths, which the URL-based detection cannot see.
+   */
+  const [streamIsHls, setStreamIsHls] = useState(false);
+
+  /**
+   * Mirrors of the two host values above.
+   *
+   * `loadStream` reads these instead of closing over the state, so its identity
+   * stays stable: otherwise every host or provider-id change would recreate the
+   * callback, re-run the resume effect and reload the episode twice.
+   */
+  const resolvedProviderIdRef = useRef(resolvedProviderId);
+  resolvedProviderIdRef.current = resolvedProviderId;
+  const streamProviderOverrideRef = useRef(streamProviderOverride);
+  streamProviderOverrideRef.current = streamProviderOverride;
+
+  /** Hosts offered in the player's Host menu. */
+  const availableHosts = useMemo(
+    () =>
+      getEnabledStreamProviders().map((name) => ({
+        id: name,
+        label: STREAM_PROVIDER_LABELS[name],
+      })),
+    []
+  );
+
+  /**
+   * The globally configured host. Only needed to label the picker when this
+   * session has no explicit override; a session override always wins.
+   */
+  const [activeProviderName, setActiveProviderName] = useState<StreamProviderName | null>(null);
+  useEffect(() => {
+    void (async () => {
+      try {
+        setActiveProviderName(await window.streamProvider.getActiveProvider());
+      } catch {
+        /* the picker simply falls back to a generic label */
+      }
+    })();
+  }, []);
+
+  const currentHostName = streamProviderOverride ?? activeProviderName ?? DEFAULT_STREAM_PROVIDER;
 
   const [playUrl, setPlayUrl] = useState<string>("");
   /** Bumps when a new stream URL is ready so the <video> remounts (retry after errors). */
@@ -180,7 +255,7 @@ export function WatchPage() {
     error: showError,
   } = useShowDetails(
     disabledHistoryProvider ? undefined : episode?.id,
-    disabledHistoryProvider ? undefined : episode?.providerId,
+    disabledHistoryProvider ? undefined : resolvedProviderId ?? undefined,
     disabledHistoryProvider ? undefined : streamProviderOverride
   );
 
@@ -357,8 +432,23 @@ export function WatchPage() {
   );
 
   const loadStream = useCallback(
-    async (ep: string, opts?: { resumeFrom?: number | null; mode?: Episode["mode"] }) => {
-      if (!episode?.providerId || !ep) return;
+    async (
+      ep: string,
+      opts?: {
+        resumeFrom?: number | null;
+        mode?: Episode["mode"];
+        /**
+         * Host selection for this load. Passed explicitly on a host switch
+         * because state updates are asynchronous: reading the refs right after
+         * `setState` would still see the previous host.
+         */
+        providerId?: string;
+        provider?: HistoryEntry["provider"];
+      }
+    ) => {
+      const targetProviderId = opts?.providerId ?? resolvedProviderIdRef.current;
+      const targetProvider = opts?.provider ?? streamProviderOverrideRef.current;
+      if (!targetProviderId || !ep) return;
       const mode = opts?.mode ?? playbackModeRef.current;
       playbackModeRef.current = mode;
       setPlaybackMode(mode);
@@ -399,12 +489,13 @@ export function WatchPage() {
           qualities,
           selectedQuality: defaultQuality,
           anilistMediaId,
+          isHlsMaster: streamIsHlsMaster,
         } = await window.streamProvider.getStreamUrl(
           episode.id,
-          episode.providerId,
+          targetProviderId,
           ep,
           mode,
-          streamProviderOverride
+          targetProvider
         );
         if (anilistMediaId != null && Number.isInteger(anilistMediaId) && anilistMediaId > 0) {
           const prev = anilistListRef.current;
@@ -413,7 +504,7 @@ export function WatchPage() {
           }
         }
         historyProviderRef.current =
-          streamProviderOverride ?? (await window.streamProvider.getActiveProvider());
+          targetProvider ?? (await window.streamProvider.getActiveProvider());
         const base = await window.streamProvider.getStreamProxyBaseUrl();
         setSubtitleTracks(proxySubtitleTracks(base, referer, subtitles));
         const qualityOptions = qualities ?? [];
@@ -482,9 +573,14 @@ export function WatchPage() {
 
         const variantQuery =
           variant && variant.trim() ? `&variant=${encodeURIComponent(variant.trim())}` : "";
+        // Providers such as AnimeUnity serve HLS from extensionless paths, so
+        // the suffix check alone would route them to the plain passthrough URL
+        // and the player would never treat the stream as HLS.
+        const isHlsStream = streamIsHlsMaster === true || isHlsPlaylistUrl(url);
+        setStreamIsHls(isHlsStream);
         const urlWithProxy = shouldTranscode
           ? `${base}/transcode/playlist.m3u8?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}${variantQuery}`
-          : isHlsPlaylistUrl(url)
+          : isHlsStream
             ? `${base}/stream/playlist.m3u8?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}${variantQuery}`
             : `${base}/stream?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}`;
         if (activeLoadTokenRef.current !== loadToken) return;
@@ -512,7 +608,7 @@ export function WatchPage() {
         }
       }
     },
-    [episode, clearReconnectTimeout, streamProviderOverride, syncAniListProgress]
+    [episode, clearReconnectTimeout, syncAniListProgress]
   );
 
   useEffect(() => {
@@ -763,6 +859,90 @@ export function WatchPage() {
     void loadStream(currentEpisode.toString(), resumeFrom != null ? { resumeFrom } : undefined);
   }, [clearReconnectTimeout, currentEpisode, loadStream]);
 
+  /**
+   * Switch to another host for the episode playing right now.
+   *
+   * The reason this exists: a source can be missing Italian subtitles for an
+   * episode, and the fix is to try a different host without leaving the page or
+   * losing the current position.
+   *
+   * Two things make it more than a flag flip:
+   *
+   *  - Provider ids are host-specific, so the show is looked up again on the
+   *    target host. The match is made on the AniList id when the result exposes
+   *    one (`episode.id`), which is stable across hosts; otherwise the first hit
+   *    is used, mirroring `resolveProviderForAniListMedia`.
+   *  - Playback position is carried over, so switching hosts does not restart
+   *    the episode.
+   */
+  const handleProviderSwitch = useCallback(
+    (nextProvider: HistoryEntry["provider"]) => {
+      if (!nextProvider || nextProvider === streamProviderOverride) return;
+
+      void (async () => {
+        setSwitchingProvider(true);
+        setError(null);
+        const resumeFrom = videoRef.current?.currentTime ?? null;
+
+        try {
+          const title = showDetails?.title.english ?? showDetails?.title.romaji ?? null;
+          const fallbackTitle =
+            title ??
+            episode?.title.english ??
+            episode?.title.romanji ??
+            episode?.title.native ??
+            null;
+
+          if (!fallbackTitle) {
+            setError("Cannot switch host: the show title is unknown.");
+            return;
+          }
+
+          const results = await window.streamProvider.search(
+            fallbackTitle,
+            undefined,
+            nextProvider
+          );
+          const wantedId = episode?.id != null ? String(episode.id) : null;
+          const match =
+            (wantedId ? results.find((r) => r.id === wantedId) : null) ?? results[0] ?? null;
+
+          if (!match) {
+            setError(
+              `This show is not available on the selected host. Try another one from the Host menu.`
+            );
+            return;
+          }
+
+          // Update the mirrors immediately: the reload below reads them for any
+          // follow-up work (quality change, reconnect) before React re-renders.
+          resolvedProviderIdRef.current = match.providerId;
+          streamProviderOverrideRef.current = nextProvider;
+          setResolvedProviderId(match.providerId);
+          setStreamProviderOverride(nextProvider);
+
+          await loadStream(String(currentEpisode), {
+            mode: playbackModeRef.current,
+            resumeFrom: resumeFrom != null && resumeFrom > 0 ? resumeFrom : null,
+            providerId: match.providerId,
+            provider: nextProvider,
+          });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to switch host");
+        } finally {
+          setSwitchingProvider(false);
+        }
+      })();
+    },
+    [
+      currentEpisode,
+      episode,
+      loadStream,
+      showDetails,
+      streamProviderOverride,
+    ]
+  );
+
   const handleVideoError = useCallback(() => {
     const el = videoRef.current;
     const mediaError = el?.error;
@@ -884,6 +1064,7 @@ export function WatchPage() {
         <WatchVideoPlayerShell
           playUrl={playUrl}
           streamRevision={streamRevision}
+          forceHls={streamIsHls}
           loadingEpisode={loadingEpisode}
           transcodeProgress={transcodeProgress}
           streamError={error}
@@ -899,6 +1080,10 @@ export function WatchPage() {
           streamQualities={streamQualities}
           selectedQuality={selectedQuality}
           qualityWarning={qualityWarning}
+          availableHosts={availableHosts}
+          currentHost={currentHostName}
+          switchingHost={switchingProvider}
+          onHostSelect={handleProviderSwitch}
           onBack={goBack}
           onQualitySelect={onQualitySelect}
           onRetryStream={retryStream}

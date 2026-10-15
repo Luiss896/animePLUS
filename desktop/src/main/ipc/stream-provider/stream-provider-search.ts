@@ -20,7 +20,8 @@ function getNativeStreamProvider(
     provider === "animepahe" ||
     provider === "animeparadise" ||
     provider === "reanime" ||
-    provider === "senshi"
+    provider === "senshi" ||
+    provider === "animeunity"
   ) {
     return streamProviders[provider] as unknown as NativeStreamProviderBridge;
   }

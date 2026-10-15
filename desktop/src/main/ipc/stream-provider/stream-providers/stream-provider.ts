@@ -6,6 +6,7 @@ import { AllAnimeStreamProvider } from "./allanime/allanime-stream-provider";
 import { AnidbStreamProvider } from "./anidb/anidb-stream-provider";
 import { AnimePaheStreamProvider } from "./animepahe-stream-provider";
 import { AnimeParadiseStreamProvider } from "./animeparadise-stream-provider";
+import { AnimeUnityStreamProvider } from "./animeunity/animeunity-stream-provider";
 import { HianimeStreamProvider } from "./hianime/hianime-stream-provider";
 import { ReanimeStreamProvider } from "./reanime/reanime-stream-provider";
 import { SenshiStreamProvider } from "./senshi/senshi-stream-provider";
@@ -37,6 +38,16 @@ export interface StreamUrlResult {
   selectedQuality?: string;
   /** AniList media id when the provider can resolve one (e.g. HiAnime embed MAL). */
   anilistMediaId?: number;
+  /**
+   * True when `url` is an HLS master whose URL does **not** end in `.m3u8`.
+   *
+   * Playlist detection is otherwise purely suffix-based (`isHlsPlaylistUrl`),
+   * and some hosts serve HLS from extensionless paths — VixCloud uses
+   * `/playlist/{id}?token=...`. Without this flag the player receives a proxy
+   * URL with no `.m3u8` suffix, does not treat the stream as HLS, and hands the
+   * manifest to the browser's native demuxer, which fails.
+   */
+  isHlsMaster?: boolean;
 }
 
 export type StreamMode = "sub" | "dub";
@@ -57,6 +68,7 @@ export interface StreamProvider {
 export const streamProviders: Record<StreamProviderName, StreamProvider> = {
   hianime: new HianimeStreamProvider(),
   allanime: new AllAnimeStreamProvider(),
+  animeunity: new AnimeUnityStreamProvider(),
   anidb: new AnidbStreamProvider(),
   animepahe: new AnimePaheStreamProvider(),
   animeparadise: new AnimeParadiseStreamProvider(),

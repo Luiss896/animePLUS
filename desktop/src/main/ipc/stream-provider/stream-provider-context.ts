@@ -36,6 +36,8 @@ export interface StreamUrlResult {
     bandwidth?: number;
   }>;
   selectedQuality?: string;
+  /** True when the master is HLS but its URL carries no `.m3u8` suffix. */
+  isHlsMaster?: boolean;
 }
 
 export interface TranscodeProgressResult {
@@ -55,11 +57,12 @@ export function exposeStreamProviderContext() {
         STREAM_PROVIDER_ACTIVE_SET_CHANNEL,
         provider
       ) as Promise<StreamProviderName>,
-    search: (query: string, filters?: SearchFilterValues) =>
+    search: (query: string, filters?: SearchFilterValues, providerName?: StreamProviderName) =>
       ipcRenderer.invoke(
         STREAM_PROVIDER_SEARCH_CHANNEL,
         query,
-        filters
+        filters,
+        providerName
       ) as Promise<ShowSearchResult[]>,
     getSearchFilters: () =>
       ipcRenderer.invoke(

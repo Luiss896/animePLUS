@@ -61,8 +61,12 @@ export function addStreamProviderListeners() {
   });
   ipcMain.handle(
     STREAM_PROVIDER_SEARCH_CHANNEL,
-    (_event, query: string, filters?: SearchFilterValues) => {
-      const providerName = getActiveStreamProviderName();
+    (_event, query: string, filters?: SearchFilterValues, providerOverride?: StreamProviderName) => {
+      // The override lets the player look a show up on another host before
+      // switching to it, without disturbing the globally active provider.
+      const providerName = providerOverride
+        ? resolveEnabledStreamProvider(providerOverride)
+        : getActiveStreamProviderName();
       return streamProviders[providerName].search(query, filters);
     }
   );

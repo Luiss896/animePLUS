@@ -33,6 +33,8 @@ export interface PlayerSubtitleTrack {
 interface VideoJsReactPlayerProps {
   src?: string;
   className?: string;
+  /** Force the HLS pipeline when the URL itself gives no HLS hint. */
+  forceHls?: boolean;
   videoRef: React.RefObject<HTMLVideoElement>;
   subtitleTracks?: PlayerSubtitleTrack[];
   /** Label of the single active subtitle track, or null for off. */
@@ -125,12 +127,28 @@ type StableMediaHandlers = {
 interface MediaSurfaceProps {
   src?: string;
   className?: string;
+  /**
+   * Force the HLS path even when the URL gives no hint of it.
+   *
+   * `isHlsSourceUrl` inspects the upstream `?url=` target, which is suffix-based
+   * and therefore blind to hosts that serve HLS from extensionless paths
+   * (VixCloud: `/playlist/{id}`). The provider knows the truth, so it can say so
+   * directly; without this the manifest goes to the browser's native demuxer,
+   * which cannot open it.
+   */
+  forceHls?: boolean;
   videoRef: React.RefObject<HTMLVideoElement>;
   handlers: StableMediaHandlers;
 }
 
-function MediaSurfaceInner({ src, className, videoRef, handlers }: MediaSurfaceProps) {
-  const isHlsSource = isHlsSourceUrl(src);
+function MediaSurfaceInner({
+  src,
+  className,
+  forceHls,
+  videoRef,
+  handlers,
+}: MediaSurfaceProps) {
+  const isHlsSource = forceHls === true || isHlsSourceUrl(src);
   const mediaClassName = useMemo(() => {
     if (!className) return PLAYER_CLASS_NAME;
     return `${className} !rounded-none !border-0`;
@@ -180,6 +198,7 @@ const MediaSurface = memo(MediaSurfaceInner, (prev, next) => {
   return (
     prev.src === next.src &&
     prev.className === next.className &&
+    prev.forceHls === next.forceHls &&
     prev.videoRef === next.videoRef &&
     prev.handlers === next.handlers
   );
@@ -192,6 +211,7 @@ const MediaSurface = memo(MediaSurfaceInner, (prev, next) => {
 export function VideoJsReactPlayer({
   src,
   className,
+  forceHls,
   videoRef,
   subtitleTracks,
   activeSubtitleLabel = null,
@@ -280,6 +300,12 @@ export function VideoJsReactPlayer({
   }, [videoRef, src, tracksKey]);
 
   return (
-    <MediaSurface src={src} className={className} videoRef={videoRef} handlers={handlers} />
+    <MediaSurface
+      src={src}
+      className={className}
+      forceHls={forceHls}
+      videoRef={videoRef}
+      handlers={handlers}
+    />
   );
 }

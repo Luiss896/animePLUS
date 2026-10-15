@@ -15,12 +15,20 @@
  *   these sites break regularly, and a single-provider setup means the app is
  *   dead the moment its one upstream changes markup or blocks the CDN.
  *
+ * - `animeunity` — ITALIAN SUB FALLBACK. Enabled because the other sources do not
+ *   guarantee Italian subtitles for every episode. It publishes two entries per
+ *   show and the `dub` flag separates them, so only the `dub: 0` release is used:
+ *   Japanese audio with burned-in Italian subtitles. Verified end-to-end against
+ *   the live site (search -> episode list -> embed -> HLS master carrying the
+ *   1080p rendition, with segments downloadable through the local proxy).
+ *
  * The remaining five stay disabled: they are compiled and instantiated anyway
  * (see `stream-providers.ts`), so re-enabling one is a one-line change here.
  */
 export const streamProviderAvailability = {
   hianime: true,
   allanime: true,
+  animeunity: true,
   anidb: false,
   animepahe: false,
   animeparadise: false,

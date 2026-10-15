@@ -1,4 +1,4 @@
-import { ArrowLeft, Loader2, Monitor, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Loader2, Monitor, RefreshCw, Server, Sparkles, TriangleAlert } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/renderer/lib/utils";
@@ -48,6 +48,8 @@ const SHADER_LABELS: Record<ShaderPresetId, string> = SHADER_PRESET_IDS.reduce(
 interface WatchVideoPlayerShellProps {
   playUrl: string;
   streamRevision: number;
+  /** Provider says the source is HLS even though the URL carries no hint. */
+  forceHls?: boolean;
   loadingEpisode: boolean;
   transcodeProgress: {
     active: boolean;
@@ -68,6 +70,13 @@ interface WatchVideoPlayerShellProps {
   selectedQuality?: string | null;
   /** Warn when no 1080p rendition exists upstream, or when none could be probed. */
   qualityWarning?: string | null;
+  /** Hosts the user can switch to without leaving the episode. */
+  availableHosts?: Array<{ id: string; label: string }>;
+  /** Host currently in use, used to label the picker. */
+  currentHost?: string | null;
+  /** True while a host switch is resolving the show on the new source. */
+  switchingHost?: boolean;
+  onHostSelect?: (providerId: string) => void;
   onBack: () => void;
   onQualitySelect?: (qualityId: string) => void;
   onRetryStream: () => void;
@@ -81,6 +90,7 @@ interface WatchVideoPlayerShellProps {
 export function WatchVideoPlayerShell({
   playUrl,
   streamRevision,
+  forceHls,
   loadingEpisode,
   transcodeProgress,
   streamError,
@@ -96,6 +106,10 @@ export function WatchVideoPlayerShell({
   streamQualities,
   selectedQuality,
   qualityWarning,
+  availableHosts,
+  currentHost,
+  switchingHost,
+  onHostSelect,
   onBack,
   onQualitySelect,
   onRetryStream,
@@ -113,6 +127,7 @@ export function WatchVideoPlayerShell({
   const [isQualitySelectOpen, setIsQualitySelectOpen] = useState(false);
   const [isShaderSelectOpen, setIsShaderSelectOpen] = useState(false);
   const [isOutputSelectOpen, setIsOutputSelectOpen] = useState(false);
+  const [isHostSelectOpen, setIsHostSelectOpen] = useState(false);
   const [activeSubtitleLabel, setActiveSubtitleLabel] = useState<string | null>(null);
   const [shaderPreset, setShaderPreset] = useState<ShaderPresetId>(DEFAULT_SHADER_PRESET_ID);
   const [outputResolution, setOutputResolution] = useState<OutputResolutionId>(
@@ -248,7 +263,8 @@ export function WatchVideoPlayerShell({
     isSubtitleSelectOpen ||
     isQualitySelectOpen ||
     isShaderSelectOpen ||
-    isOutputSelectOpen;
+    isOutputSelectOpen ||
+    isHostSelectOpen;
 
   return (
     <div
@@ -297,6 +313,7 @@ export function WatchVideoPlayerShell({
               key={streamRevision}
               videoRef={videoRef}
               src={playUrl}
+              forceHls={forceHls}
               subtitleTracks={subtitleTracks}
               activeSubtitleLabel={activeSubtitleLabel}
               className="absolute inset-0 h-full w-full object-contain bg-black"
@@ -395,6 +412,42 @@ export function WatchVideoPlayerShell({
         ) : null}
 
         <div className="flex min-w-0 shrink items-center gap-2">
+          {availableHosts && availableHosts.length > 1 && onHostSelect ? (
+            <Select
+              value={currentHost ?? undefined}
+              onValueChange={(value) => {
+                onHostSelect(value);
+              }}
+              onOpenChange={setIsHostSelectOpen}
+              disabled={loadingEpisode || switchingHost || !playUrl}
+            >
+              <SelectTrigger
+                className={cn(watchSelectTriggerClass, "w-[152px]")}
+                title="Change streaming host — pick one that carries Italian subtitles"
+              >
+                {switchingHost ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-white/70" />
+                ) : (
+                  <Server className="h-3.5 w-3.5 shrink-0 text-white/60" />
+                )}
+                <SelectValue placeholder="Host" />
+              </SelectTrigger>
+              <SelectContent className={watchSelectContentClass}>
+                {availableHosts.map((host) => (
+                  <SelectItem key={host.id} value={host.id} className={watchSelectItemClass}>
+                    <span className="flex flex-col gap-0.5">
+                      <span>{host.label}</span>
+                      <span className="text-[11px] leading-snug text-white/60">
+                        {host.id === "animeunity"
+                          ? "Italian subtitles guaranteed (burned in)"
+                          : "Switch source for this episode"}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
           <Select
             value={outputResolution}
             onValueChange={(value) => setOutputResolution(value as OutputResolutionId)}
