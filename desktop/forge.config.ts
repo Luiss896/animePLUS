@@ -1,5 +1,3 @@
-import { MakerDeb } from "@electron-forge/maker-deb";
-import { MakerRpm } from "@electron-forge/maker-rpm";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
@@ -19,8 +17,6 @@ const config: ForgeConfig = {
         schemes: ["animeplus"],
       },
     ],
-    // Must match `package.json` `name` — MakerDeb looks up the binary by that name.
-    // If this differs (e.g. "openanime"), the .deb step fails on Linux CI.
     executableName: "animePLUS",
     /**
      * Ship ffmpeg alongside the app so the main process can execute it from a
@@ -30,7 +26,13 @@ const config: ForgeConfig = {
     extraResource: isWindows ? ["bin/ffmpeg.exe"] : ["bin/ffmpeg"],
   },
   rebuildConfig: {},
-  makers: [new MakerSquirrel({}), new MakerZIP({}, ["darwin"]), new MakerRpm({}), new MakerDeb({})],
+  /*
+   * Windows and macOS only. The Linux makers (deb/rpm) were removed along with
+   * the Linux CI job: they shell out to `dpkg`/`fakeroot` (declared as
+   * `requiredExternalBinaries`), which made the job fail before it produced
+   * anything, and Linux is not a target for now.
+   */
+  makers: [new MakerSquirrel({}), new MakerZIP({}, ["darwin"])],
   plugins: [
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.

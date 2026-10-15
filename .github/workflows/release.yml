@@ -14,11 +14,11 @@ jobs:
       contents: write
 
     strategy:
-      # One platform failing must not cancel the others: a Linux-only problem
-      # previously cancelled Windows and macOS before they produced anything.
+      # A failure on one platform must not cancel the other. This is what hid a
+      # Linux-only packaging failure behind two cancelled jobs.
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [windows-latest, macos-latest]
 
     steps:
       - name: Check out Git repository
@@ -27,17 +27,9 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          # 20 matches what the project builds against locally; 18 also worked
-          # for Forge but is past end-of-life.
+          # 20 matches what the project is built and tested against locally;
+          # 18 also worked for Forge but is past end-of-life.
           node-version: 20
-
-      # MakerDeb shells out to `dpkg` and `fakeroot` (declared as
-      # requiredExternalBinaries), which ubuntu-latest does not ship. Without
-      # this the Linux job fails and, before fail-fast was disabled, took the
-      # other two platforms down with it.
-      - name: Install Linux packaging tools
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y dpkg fakeroot rpm
 
       - name: Install dependencies
         run: npm ci

@@ -50,18 +50,13 @@ Download the latest `animePLUS-*.Setup.exe` from the [releases page](../../relea
 
 The build is not code-signed, so SmartScreen may warn you on first launch. Choose *More info → Run anyway*, or verify the source yourself — the full source is in this repository.
 
-### Linux and macOS
+### macOS
 
-> **Windows only for now.** Current releases ship a Windows installer. Linux and macOS builds are
-> **planned future work** and are not produced by the current CI — the sections below describe the
-> intended packaging, not a download that exists today. To run on those platforms in the meantime,
-> build from source (see [Building](#building)).
+Download the latest `animePLUS-darwin-arm64-*.zip` from the [releases page](../../releases) and unzip
+it (Apple Silicon).
 
-#### macOS (planned)
-
-Once published, the release will be a `animePLUS-darwin-arm64-*.zip`. Because the application is not
-signed or notarized, macOS will attach a `com.apple.quarantine` flag, and Gatekeeper may refuse to
-launch it. Clearing that flag is the workaround:
+Because the application is not signed or notarized, macOS will attach a `com.apple.quarantine` flag
+and Gatekeeper may refuse to launch it. Clearing that flag is the workaround:
 
 ```bash
 xattr -cr /Applications/animePLUS.app
@@ -71,10 +66,11 @@ Downloading an app from outside the App Store attaches `com.apple.quarantine` to
 not correctly signed, Gatekeeper blocks it. Running `xattr -cr` on the application folder wipes
 those flags, so macOS treats the file as locally created and allows it to run.
 
-#### Linux (planned)
+### Linux
 
-`.rpm` and `.deb` packages are the intended output. Linux has never been actively optimized — if
-something is broken there, please open an issue.
+Not supported, and no Linux packages are produced. If you want to run it there anyway, build from
+source (see [Building](#building)) — the Linux makers have been removed from the Forge config, so
+`npm run make` will only produce the Windows and macOS artifacts.
 
 ## Building
 
