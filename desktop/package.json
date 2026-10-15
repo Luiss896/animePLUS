@@ -95,14 +95,5 @@
   },
   "allowScripts": {
     "electron@31.3.0": true
-  },
-  "publish": {
-    "provider": "github",
-    "owner": "Luiss896",
-    "repo": "animePLUS",
-    "release": {
-      "draft": false,
-      "prerelease": false
-    }
   }
 }

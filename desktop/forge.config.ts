@@ -73,7 +73,18 @@ const config: ForgeConfig = {
           owner: "Luiss896",
           name: "animePLUS",
         },
-        prerelease: true,
+        /*
+         * `draft` MUST be set explicitly. PublisherGithub tests
+         * `draft: config.draft !== false`, so omitting it creates a *draft*
+         * release. A draft is invisible to the public releases API and to
+         * logged-out visitors, which looks identical to "nothing was published"
+         * even though the CI step reports success.
+         *
+         * `prerelease` was true, which would have marked a normal 1.0.0 release
+         * as a prerelease.
+         */
+        draft: false,
+        prerelease: false,
       },
     },
   ],
