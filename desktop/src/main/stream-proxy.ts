@@ -187,47 +187,54 @@ const hlsSessions = new Map<string, HlsSession>();
 const hlsSessionInits = new Map<string, Promise<HlsSession>>();
 const transcodeProgress = new Map<string, TranscodeProgressSnapshot>();
 
-/** Upstream URL+referer lookups for opaque `?u=` playlist/segment links. */
+/** Upstream URL+referer carried inside an opaque `?u=` playlist/segment link. */
 interface UpstreamTarget {
   url: string;
   referer: string | null;
 }
 
-const MAX_UPSTREAM_TARGETS = 4096;
-const upstreamTargets = new Map<string, UpstreamTarget>();
-const upstreamTargetIdsByKey = new Map<string, string>();
-
-function upstreamTargetKey(url: string, referer: string | null): string {
-  return `${url}\0${referer ?? ""}`;
+/**
+ * Encode an upstream URL (plus the referer it needs) for use as an opaque `?u=`
+ * value in rewritten playlists and ffmpeg `-i` URLs.
+ *
+ * The id is the **payload itself**, not a key into a lookup table, so the proxy
+ * can resolve any URL it has ever handed out, no matter how much traffic came
+ * after it. The previous revision kept a bounded FIFO table
+ * (`MAX_UPSTREAM_TARGETS = 4096`, one entry per rewritten URI, ~360 per episode)
+ * and evicted the oldest entries. That table was unsafe by construction: a
+ * rewritten media playlist publishes its `#EXT-X-KEY` *before* its ~360 segment
+ * URIs, so at capacity the key's entry was evicted by the segment registrations
+ * that followed it — inside the very rewrite that published it. The client then
+ * requested a URL the proxy had produced milliseconds earlier and got a 404:
+ * hls.js reported "HTTP Error 404 loading key Not Found" on AnimeUnity
+ * (VixCloud AES-128), and ffmpeg reported "Server returned 404 Not Found" while
+ * parsing the HiAnime playlist, which surfaced as a transcode failure.
+ *
+ * base64url is used so the value never contains `/`, `:` or `.`: Windows ffmpeg
+ * mis-parses CDN hosts that look like scientific notation when they appear in a
+ * query value (`hls.1embed.buzz` → `https://hls.1`), and the CDN URL must stay
+ * out of the URL ffmpeg sees. It only ever exists inside the main process, after
+ * decoding.
+ */
+function encodeUpstreamTarget(url: string, referer: string | null): string {
+  const payload = `${url}\n${referer ?? ""}`;
+  return `e${Buffer.from(payload, "utf8").toString("base64url")}`;
 }
 
-/**
- * Register an upstream URL for opaque proxy links. Ids are letter-prefixed hex so
- * Windows ffmpeg cannot mis-parse them as scientific notation (unlike hosts like
- * hls.1embed.buzz embedded in ?url=).
- */
-function registerUpstreamTarget(url: string, referer: string | null): string {
-  const key = upstreamTargetKey(url, referer);
-  const existing = upstreamTargetIdsByKey.get(key);
-  if (existing && upstreamTargets.has(existing)) return existing;
-
-  while (upstreamTargets.size >= MAX_UPSTREAM_TARGETS) {
-    const oldestId = upstreamTargets.keys().next().value;
-    if (!oldestId) break;
-    const oldest = upstreamTargets.get(oldestId);
-    upstreamTargets.delete(oldestId);
-    if (oldest) {
-      const oldKey = upstreamTargetKey(oldest.url, oldest.referer);
-      if (upstreamTargetIdsByKey.get(oldKey) === oldestId) {
-        upstreamTargetIdsByKey.delete(oldKey);
-      }
-    }
+function decodeUpstreamTarget(id: string): UpstreamTarget | null {
+  // `t<hash>` ids belong to the removed lookup table; they cannot be resolved.
+  if (!id.startsWith("e")) return null;
+  try {
+    const payload = Buffer.from(id.slice(1), "base64url").toString("utf8");
+    const separator = payload.indexOf("\n");
+    if (separator < 0) return null;
+    const url = payload.slice(0, separator);
+    if (!/^https?:\/\//i.test(url)) return null;
+    const referer = payload.slice(separator + 1);
+    return { url, referer: referer.length > 0 ? referer : null };
+  } catch {
+    return null;
   }
-
-  const id = `t${createHash("sha1").update(key).digest("hex").slice(0, 20)}`;
-  upstreamTargets.set(id, { url, referer });
-  upstreamTargetIdsByKey.set(key, id);
-  return id;
 }
 
 function resolveStreamTarget(parsed: URL): {
@@ -238,7 +245,7 @@ function resolveStreamTarget(parsed: URL): {
   const variant = parsed.searchParams.get("variant");
   const opaqueId = parsed.searchParams.get("u");
   if (opaqueId) {
-    const target = upstreamTargets.get(opaqueId);
+    const target = decodeUpstreamTarget(opaqueId);
     if (!target) return null;
     return {
       targetUrl: target.url,
@@ -708,8 +715,9 @@ export function buildLocalProxyInputUrl(
   referer: string | null,
   variant: string | null = null
 ): string {
-  // Opaque id so Windows ffmpeg never sees nested CDN hosts in ?url= (e.g. .1e…).
-  const id = registerUpstreamTarget(targetUrl, referer);
+  // Self-describing id so Windows ffmpeg never sees nested CDN hosts in ?url=
+  // (e.g. .1e…), and so the URL stays resolvable for the whole playback session.
+  const id = encodeUpstreamTarget(targetUrl, referer);
   const params = new URLSearchParams();
   params.set("u", id);
   if (variant && variant.trim()) params.set("variant", variant.trim());
@@ -1663,9 +1671,11 @@ function rewriteHlsManifest(
     // Give proxied playlists/segments real extensions so ffmpeg (and picky HLS
     // demuxers) don't reject extensionless `/stream` URLs.
     const proxyPath = isHlsPlaylistUrl(absolute) ? "/stream/playlist.m3u8" : "/stream/segment.ts";
-    // Opaque ids only — never embed the CDN URL. Windows ffmpeg truncates hosts
-    // that look like scientific notation (hls.1embed.buzz → https://hls.1).
-    const id = registerUpstreamTarget(absolute, effectiveReferer);
+    // Self-describing ids only — never embed the CDN URL. Windows ffmpeg
+    // truncates hosts that look like scientific notation (hls.1embed.buzz →
+    // https://hls.1), and the encoded form also cannot be evicted while a
+    // playlist that references it is still being played.
+    const id = encodeUpstreamTarget(absolute, effectiveReferer);
     const params = new URLSearchParams();
     params.set("u", id);
     return `${proxyBaseUrl}${proxyPath}?${params.toString()}`;

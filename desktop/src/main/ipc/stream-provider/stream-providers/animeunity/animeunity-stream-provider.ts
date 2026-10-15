@@ -333,7 +333,25 @@ export class AnimeUnityStreamProvider implements StreamProvider {
       throw new Error("AnimeUnity embed page did not expose a master playlist");
     }
 
-    const masterUrl = `${baseUrl}?token=${token}&expires=${expires}&h=1`;
+    // The `url` is not always bare: VixCloud serves some episodes from
+    // `https://vixcloud.co/playlist/{id}?b=1`, and that flag is load-bearing —
+    // requesting the same playlist without it returns 403. Appending with a
+    // second `?` (`...?b=1?token=…`) makes the server read the whole thing as the
+    // value of `b`, which is also a 403, so merge the query properly instead of
+    // concatenating. Verified against the live CDN for episode 110629
+    // (The Ramparts of Ice S2 ep 3): `?b=1&token=…` → 200 with a 1080p ladder,
+    // `?b=1?token=…` and `?token=…` (dropping `b`) → 403.
+    const masterUrl = (() => {
+      try {
+        const url = new URL(baseUrl);
+        url.searchParams.set("token", token);
+        url.searchParams.set("expires", expires);
+        url.searchParams.set("h", "1");
+        return url.toString();
+      } catch {
+        return `${baseUrl}?token=${token}&expires=${expires}&h=1`;
+      }
+    })();
     log("master:resolved", { episodeId, ms: Date.now() - startedAt });
     return { masterUrl };
   }

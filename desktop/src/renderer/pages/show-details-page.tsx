@@ -129,7 +129,10 @@ export function ShowDetailsPage() {
     setActiveMode(anime?.mode ?? "sub");
   }, [anime?.id, anime?.mode]);
 
-  const { details, episodesByMode, loading, error } = useShowDetails(id, anime?.providerId);
+  const { details, episodesByMode, loading, error, provider: detailsProvider } = useShowDetails(
+    id,
+    anime?.providerId
+  );
 
   const anilistMediaId = details?.anilistMediaId ?? null;
   const hasAniListId = anilistMediaId != null && anilistMediaId > 0;
@@ -166,6 +169,13 @@ export function ShowDetailsPage() {
             index: Number(episode),
             mode: activeMode,
           },
+          /*
+           * The host that actually answered for this provider id, not the host
+           * configured now: ids are host-specific, and the setting may have
+           * changed since this page was opened. Carrying it lets the watch page
+           * request the stream from the host that can serve it.
+           */
+          ...(detailsProvider ? { providerOverride: detailsProvider } : {}),
         },
       });
       setPlayingEpisode(null);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { StreamProviderName } from "@/shared/stream-providers";
+import { getEnabledStreamProviders, type StreamProviderName } from "@/shared/stream-providers";
 import type { AniListShowDetails, ShowDetails } from "@/shared/types";
 
 type AnimeMode = "sub" | "dub";
@@ -52,6 +52,17 @@ interface UseShowDetailsResult {
   episodesByMode: Record<AnimeMode, EpisodesState>;
   loading: boolean;
   error: string | null;
+  /**
+   * Host that actually answered for this provider id.
+   *
+   * Provider ids are host-specific, and the active host setting can change
+   * between the moment a show id is captured (search results, "recently
+   * uploaded" cards) and the moment it is used. The id is authoritative, the
+   * setting is only a preference, so every enabled host is tried in turn and this
+   * is the one that resolved it — callers must carry it forward to the watch
+   * page, otherwise playback repeats the same mistake.
+   */
+  provider: StreamProviderName | null;
 }
 
 function parseEpisodeIndex(episode: string, fallbackIndex: number): number {
@@ -167,12 +178,14 @@ export function useShowDetails(
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<StreamProviderName | null>(null);
 
   useEffect(() => {
     if (!animeId || !providerId) {
       setDetails(null);
       setEpisodesByMode({ sub: { status: "idle" }, dub: { status: "idle" } });
       setError(null);
+      setProvider(null);
       setLoading(false);
       return;
     }
@@ -184,51 +197,104 @@ export function useShowDetails(
 
     void (async () => {
       try {
-        const [detailsResult, subResult, dubResult] = await Promise.allSettled([
-          window.streamProvider.getShowDetails(providerId, providerOverride),
-          window.streamProvider.getEpisodes(providerId, "sub", providerOverride),
-          window.streamProvider.getEpisodes(providerId, "dub", providerOverride),
-        ]);
-
+        const enabled = getEnabledStreamProviders();
+        // The id decides which host can answer; the setting only says where to
+        // start. A foreign id makes the first host fail (AnimeUnity answers 500
+        // for a HiAnime slug, HiAnime mis-reads an AnimeUnity id), or — worse —
+        // resolve to an unrelated show with no episodes, which is why an empty
+        // episode list is treated as "keep looking" rather than as success.
+        let preferred = providerOverride ?? null;
+        if (!preferred) {
+          try {
+            preferred = await window.streamProvider.getActiveProvider();
+          } catch {
+            preferred = null;
+          }
+        }
         if (cancelled) return;
 
-        const nextSubState: EpisodesState =
-          subResult.status === "fulfilled"
-            ? { status: "loaded", episodes: subResult.value }
-            : {
-                status: "error",
-                message:
-                  subResult.reason instanceof Error
-                    ? subResult.reason.message
-                    : "Failed to load sub episodes",
-              };
+        const order: StreamProviderName[] = [];
+        if (preferred) order.push(preferred);
+        for (const name of enabled) {
+          if (!order.includes(name)) order.push(name);
+        }
 
-        const nextDubState: EpisodesState =
-          dubResult.status === "fulfilled"
-            ? { status: "loaded", episodes: dubResult.value }
-            : {
-                status: "error",
-                message:
-                  dubResult.reason instanceof Error
-                    ? dubResult.reason.message
-                    : "Failed to load dub episodes",
-              };
+        let best: {
+          host: StreamProviderName;
+          details: ShowDetails;
+          sub: EpisodesState;
+          dub: EpisodesState;
+        } | null = null;
+        let firstError: string | null = null;
+        let nothingToPlay: { host: StreamProviderName; details: ShowDetails } | null = null;
 
-        setEpisodesByMode({ sub: nextSubState, dub: nextDubState });
+        for (const host of order) {
+          const [detailsResult, subResult, dubResult] = await Promise.allSettled([
+            window.streamProvider.getShowDetails(providerId, host),
+            window.streamProvider.getEpisodes(providerId, "sub", host),
+            window.streamProvider.getEpisodes(providerId, "dub", host),
+          ]);
+          if (cancelled) return;
 
-        if (detailsResult.status !== "fulfilled") {
+          if (detailsResult.status !== "fulfilled") {
+            firstError ??=
+              detailsResult.reason instanceof Error
+                ? detailsResult.reason.message
+                : `Failed to load details from ${host}`;
+            continue;
+          }
+
+          const toEpisodesState = (
+            result: PromiseSettledResult<string[]>,
+            mode: AnimeMode
+          ): EpisodesState =>
+            result.status === "fulfilled"
+              ? { status: "loaded", episodes: result.value }
+              : {
+                  status: "error",
+                  message:
+                    result.reason instanceof Error
+                      ? result.reason.message
+                      : `Failed to load ${mode} episodes`,
+                };
+
+          const sub = toEpisodesState(subResult, "sub");
+          const dub = toEpisodesState(dubResult, "dub");
+          if (!best) {
+            nothingToPlay = { host, details: detailsResult.value };
+          }
+          const hasEpisodes =
+            (sub.status === "loaded" && sub.episodes.length > 0) ||
+            (dub.status === "loaded" && dub.episodes.length > 0);
+          if (hasEpisodes) {
+            best = { host, details: detailsResult.value, sub, dub };
+            break;
+          }
+        }
+
+        if (!best && nothingToPlay) {
+          // No host listed any episode; show the one that at least resolved.
+          best = {
+            host: nothingToPlay.host,
+            details: nothingToPlay.details,
+            sub: { status: "loaded", episodes: [] },
+            dub: { status: "loaded", episodes: [] },
+          };
+        }
+
+        if (!best) {
           setDetails(null);
-          setError(
-            detailsResult.reason instanceof Error
-              ? detailsResult.reason.message
-              : "Failed to load details"
-          );
+          setProvider(null);
+          setError(firstError ?? "Failed to load details");
           return;
         }
 
-        const streamDetails = detailsResult.value;
-        const subEpisodes = nextSubState.status === "loaded" ? nextSubState.episodes : [];
-        const dubEpisodes = nextDubState.status === "loaded" ? nextDubState.episodes : [];
+        setProvider(best.host);
+        setEpisodesByMode({ sub: best.sub, dub: best.dub });
+
+        const streamDetails = best.details;
+        const subEpisodes = best.sub.status === "loaded" ? best.sub.episodes : [];
+        const dubEpisodes = best.dub.status === "loaded" ? best.dub.episodes : [];
         const mediaId = resolveAniListMediaId(animeId, providerId, streamDetails);
 
         let aniListDetails: AniListShowDetails | null = null;
@@ -254,6 +320,7 @@ export function useShowDetails(
       } catch (err: unknown) {
         if (!cancelled) {
           setDetails(null);
+          setProvider(null);
           setError(err instanceof Error ? err.message : "Failed to load details");
         }
       } finally {
@@ -266,5 +333,5 @@ export function useShowDetails(
     };
   }, [animeId, providerId, providerOverride]);
 
-  return { details, episodesByMode, loading, error };
+  return { details, episodesByMode, loading, error, provider };
 }

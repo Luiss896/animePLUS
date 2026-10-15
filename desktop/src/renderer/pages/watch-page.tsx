@@ -17,13 +17,35 @@ import {
   isHistoryProviderDisabled,
   type StreamProviderName,
 } from "@/shared/stream-providers";
-import type { AniListMediaListStatus, Episode, HistoryEntry } from "@/shared/types";
+import type {
+  AniListMediaListStatus,
+  Episode,
+  HistoryEntry,
+  ShowSearchResult,
+} from "@/shared/types";
 import { isHlsPlaylistUrl } from "@/shared/utils/hls-url";
 
 import { type RichShowDetails, useShowDetails } from "../hooks/use-show-details";
+import {
+  buildShowSearchQueries,
+  isDecisiveShowMatch,
+  pickBestShowMatch,
+  scoreShowCandidate,
+  type ShowMatchQuery,
+} from "../lib/show-matching";
 
 /** How many automatic reconnects after a playback error before showing the manual overlay. */
 const MAX_AUTO_RECONNECT = 5;
+
+/**
+ * Score at which a cross-host match is trusted without trying more title
+ * spellings. 600 is reached by an exact title match that also agrees on the
+ * season (400 + 150, plus the episode-count bonus).
+ */
+const CONFIDENT_MATCH_SCORE = 600;
+
+/** Cross-host searches are cached: switching hosts twice must not re-query. */
+const SEARCH_CACHE_TTL_MS = 5 * 60_000;
 
 /** Fidelity target. Mirrors PREFERRED_HLS_HEIGHT in shared/utils/hls-master.ts. */
 const TARGET_HEIGHT = 1080;
@@ -60,6 +82,13 @@ function logPlaybackFailure(event: string, meta?: Record<string, unknown>): void
   if (!IS_DEV) return;
   const suffix = meta ? ` ${JSON.stringify(meta)}` : "";
   console.error(`[watch-playback] ${event}${suffix}`);
+}
+
+/** Same channel as `logPlaybackFailure`, for events that are not failures. */
+function logPlaybackInfo(event: string, meta?: Record<string, unknown>): void {
+  if (!IS_DEV) return;
+  const suffix = meta ? ` ${JSON.stringify(meta)}` : "";
+  console.info(`[watch-playback] ${event}${suffix}`);
 }
 
 function shouldUseServerTranscode(streamUrl: string): boolean {
@@ -224,6 +253,19 @@ export function WatchPage() {
   resolvedProviderIdRef.current = resolvedProviderId;
   const streamProviderOverrideRef = useRef(streamProviderOverride);
   streamProviderOverrideRef.current = streamProviderOverride;
+  /**
+   * Host that actually answered for `episode.providerId` (see `useShowDetails`)
+   * and the host the last stream request was sent to.
+   *
+   * Provider ids are host-specific while the host setting is global, so the two
+   * can disagree — a list fetched before the setting changed, a show page left
+   * open across the switch. The id is authoritative: whichever host resolved it
+   * is the host that can stream it. Sending it to the other one is what produced
+   * "AnimeUnity request failed (500)" and a dead player.
+   */
+  const showProviderRef = useRef<HistoryEntry["provider"] | null>(null);
+  const lastLoadProviderRef = useRef<HistoryEntry["provider"] | null>(null);
+  const activeProviderNameRef = useRef<StreamProviderName | null>(null);
 
   /** Hosts offered in the player's Host menu. */
   const availableHosts = useMemo(
@@ -249,6 +291,7 @@ export function WatchPage() {
       }
     })();
   }, []);
+  activeProviderNameRef.current = activeProviderName;
 
   const currentHostName = streamProviderOverride ?? activeProviderName ?? DEFAULT_STREAM_PROVIDER;
 
@@ -278,11 +321,13 @@ export function WatchPage() {
     episodesByMode,
     loading: showLoading,
     error: showError,
+    provider: showProvider,
   } = useShowDetails(
     disabledHistoryProvider ? undefined : episode?.id,
     disabledHistoryProvider ? undefined : resolvedProviderId ?? undefined,
     disabledHistoryProvider ? undefined : streamProviderOverride
   );
+  showProviderRef.current = showProvider ?? null;
 
   const [currentEpisode, setCurrentEpisode] = useState<number>(() => episode?.index ?? 1);
   const [playbackMode, setPlaybackMode] = useState<Episode["mode"]>(() => episode?.mode ?? "sub");
@@ -472,8 +517,20 @@ export function WatchPage() {
       }
     ) => {
       const targetProviderId = opts?.providerId ?? resolvedProviderIdRef.current;
-      const targetProvider = opts?.provider ?? streamProviderOverrideRef.current;
+      /*
+       * Precedence: an explicit choice for this session (Host menu, route history
+       * override) > the host that actually resolved this provider id > the
+       * configured host. The middle step is what stops a host switch from being
+       * undone by a stale setting.
+       */
+      const targetProvider =
+        opts?.provider ??
+        streamProviderOverrideRef.current ??
+        showProviderRef.current ??
+        activeProviderNameRef.current ??
+        undefined;
       if (!targetProviderId || !ep) return;
+      lastLoadProviderRef.current = targetProvider ?? null;
       const mode = opts?.mode ?? playbackModeRef.current;
       playbackModeRef.current = mode;
       setPlaybackMode(mode);
@@ -718,45 +775,125 @@ export function WatchPage() {
   /**
    * Look a show up on a specific host and return its id **on that host**.
    *
-   * Provider ids are host-specific (HiAnime uses a trailing-number slug,
-   * AnimeUnity uses `{id}-{slug}`), so an id remembered from one host is
-   * meaningless to another — HiAnime would read the trailing `-2` of an
-   * AnimeUnity id as catalog id 2 and then report "episode not found". The match
-   * is made on the AniList id when the result exposes one (`episode.id`), which
-   * is stable across hosts; otherwise the first hit is used, mirroring
-   * `resolveProviderForAniListMedia`.
+   * Provider ids are host-specific and cannot be compared with each other:
+   * AnimeUnity exposes the AniList media id in its search results, HiAnime only
+   * its own slug, and `episode.id` is whatever the host that recorded the entry
+   * used. The previous revision matched `episode.id` against the target host's
+   * result ids and fell back to `results[0]`, which opened the *first season* of a
+   * show being watched in its second — indistinguishable, to the user, from "the
+   * host switch is broken".
+   *
+   * The lookup now walks several spellings of the title (see
+   * `buildShowSearchQueries`) and scores the candidates (see `show-matching.ts`),
+   * treating the AniList id as decisive and refusing to answer when the only
+   * candidates disagree about the season.
    */
+  const searchCacheRef = useRef(new Map<string, { at: number; results: ShowSearchResult[] }>());
+
+  const searchProviderCached = useCallback(
+    async (query: string, provider: HistoryEntry["provider"]): Promise<ShowSearchResult[]> => {
+      const key = `${provider}\u0000${query.toLowerCase()}`;
+      const cached = searchCacheRef.current.get(key);
+      if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.results;
+      const results = await window.streamProvider.search(query, undefined, provider);
+      searchCacheRef.current.set(key, { at: Date.now(), results });
+      return results;
+    },
+    []
+  );
+
   const resolveShowOnProvider = useCallback(
     async (
       targetProvider: HistoryEntry["provider"],
-      title: string | null
+      titles: string[],
+      anilistMediaId: number | null,
+      episodeIndex: number | null
     ): Promise<{ providerId: string; provider: HistoryEntry["provider"] } | null> => {
-      if (!title) return null;
-      const results = await window.streamProvider.search(title, undefined, targetProvider);
-      const wantedId = episode?.id != null ? String(episode.id) : null;
-      const match =
-        (wantedId ? results.find((r) => r.id === wantedId) : null) ?? results[0] ?? null;
-      if (!match) return null;
-      return { providerId: match.providerId, provider: targetProvider };
+      const queries = buildShowSearchQueries(titles);
+      if (queries.length === 0) return null;
+
+      const matchQuery: ShowMatchQuery = { titles, anilistMediaId, episodeIndex };
+      const candidates = new Map<string, ShowSearchResult>();
+
+      for (const query of queries) {
+        let results: ShowSearchResult[] = [];
+        try {
+          results = await searchProviderCached(query, targetProvider);
+        } catch {
+          // A single failing query must not abandon the lookup.
+          continue;
+        }
+        for (const result of results) {
+          if (!candidates.has(result.providerId)) candidates.set(result.providerId, result);
+        }
+
+        const found = [...candidates.values()];
+        // The provider confirmed the AniList entry: no further spelling needed.
+        if (found.some((candidate) => isDecisiveShowMatch(candidate, anilistMediaId))) break;
+        const confident = pickBestShowMatch(found, matchQuery);
+        if (confident && scoreShowCandidate(confident, matchQuery) >= CONFIDENT_MATCH_SCORE) break;
+      }
+
+      const best = pickBestShowMatch([...candidates.values()], matchQuery);
+      if (!best) return null;
+      logPlaybackInfo("host-switch-matched", {
+        provider: targetProvider,
+        providerId: best.providerId,
+        score: scoreShowCandidate(best, matchQuery),
+      });
+      return { providerId: best.providerId, provider: targetProvider };
     },
-    [episode?.id]
+    [searchProviderCached]
   );
 
   /**
-   * Best available show title for a cross-host lookup. `showDetails` is the
-   * richest source but is only populated after a successful load, so the route
-   * episode is the fallback on a cold open.
+   * Titles for the show, richest first.
+   *
+   * `showDetails` is the best source but only exists after a successful load, so
+   * the route episode's titles are the fallback on a cold open. Every spelling is
+   * tried because catalogues index different ones: AnimeUnity answers "Mou Ippon"
+   * and "Mahou Shoujo Magical Destroyers" but not "Ippon! again" or "Magical Girl
+   * Magical Destroyers".
    */
-  const showTitleForLookup = useMemo(
-    () =>
-      showDetails?.title.english ??
-      showDetails?.title.romaji ??
-      episode?.title.english ??
-      episode?.title.romanji ??
-      episode?.title.native ??
-      null,
-    [showDetails, episode]
-  );
+  const showTitleCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    const add = (value: string | null | undefined): void => {
+      const trimmed = typeof value === "string" ? value.trim() : "";
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      list.push(trimmed);
+    };
+    add(showDetails?.title.english);
+    add(episode?.title.english);
+    add(showDetails?.title.romaji);
+    add(episode?.title.romanji);
+    add(showDetails?.title.native);
+    add(episode?.title.native);
+    return list;
+  }, [showDetails, episode]);
+
+  /**
+   * AniList media id for the show being watched — the only id that means the same
+   * thing on every host. Never assume a provider-native numeric id is AniList.
+   */
+  const anilistMediaIdForLookup = useMemo(() => {
+    const fromDetails = showDetails?.anilistMediaId;
+    if (typeof fromDetails === "number" && Number.isInteger(fromDetails) && fromDetails > 0) {
+      return fromDetails;
+    }
+    const fromEpisode = Number(episode?.id);
+    if (
+      Number.isInteger(fromEpisode) &&
+      fromEpisode > 0 &&
+      episode?.id !== episode?.providerId
+    ) {
+      return fromEpisode;
+    }
+    return null;
+  }, [showDetails?.anilistMediaId, episode?.id, episode?.providerId]);
 
   /**
    * Guarantees the initial load runs exactly once per route episode.
@@ -769,6 +906,13 @@ export function WatchPage() {
 
   useEffect(() => {
     if (!episode || disabledHistoryProvider) return;
+
+    /*
+     * Wait for the configured host to be known before latching the initial load:
+     * `loadStream` needs it to decide where to send `providerId`, and latching
+     * first would leave the episode unloaded until something else re-triggered it.
+     */
+    if (!historyProviderOverride && !streamProviderOverride && !activeProviderName) return;
 
     const loadKey = `${episode.id}:${episode.index}:${episode.mode}`;
     if (didInitialLoadRef.current === loadKey) return;
@@ -798,7 +942,12 @@ export function WatchPage() {
     }
 
     void (async () => {
-      const resolved = await resolveShowOnProvider(historyProviderOverride, showTitleForLookup);
+      const resolved = await resolveShowOnProvider(
+        historyProviderOverride,
+        showTitleCandidates,
+        anilistMediaIdForLookup,
+        episode.index
+      );
       if (resolved) {
         resolvedProviderIdRef.current = resolved.providerId;
         setResolvedProviderId(resolved.providerId);
@@ -810,14 +959,113 @@ export function WatchPage() {
       });
     })();
   }, [
+    activeProviderName,
     disabledHistoryProvider,
     episode,
     historyProviderOverride,
     loadStream,
     resolveShowOnProvider,
     resumeFromMs,
-    showTitleForLookup,
+    showTitleCandidates,
+    anilistMediaIdForLookup,
     state?.episode?.providerId,
+    streamProviderOverride,
+  ]);
+
+  /**
+   * Continue on the host that owns this provider id.
+   *
+   * A watch route can carry an id recorded by a *different* host than the one in
+   * use: a card from a list fetched before the host setting changed, a history
+   * entry resumed from another page, a show page left open across the switch.
+   * `useShowDetails` reports which host actually answered for the id, and if that
+   * is not where the stream was requested, the request is simply repeated there —
+   * the id is evidence, the setting is only a preference.
+   *
+   * This replaces the previous behaviour of handing the id to the configured host
+   * regardless: AnimeUnity answers its error page for a HiAnime slug
+   * (`/anime/magical-destroyers-4410` → "AnimeUnity request failed (500)"), and
+   * HiAnime can resolve a foreign id to an unrelated show.
+   */
+  const recoveryAttemptRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!episode || disabledHistoryProvider) return;
+    if (!showProvider) return;
+    // An explicit choice for this session always wins over the detected owner.
+    if (streamProviderOverride) return;
+    const usedHost = lastLoadProviderRef.current;
+    if (usedHost == null || usedHost === showProvider) return;
+
+    const attemptKey = `owner:${episode.id}:${String(currentEpisode)}:${showProvider}`;
+    if (recoveryAttemptRef.current === attemptKey) return;
+    recoveryAttemptRef.current = attemptKey;
+
+    logPlaybackInfo("host-recovery", { from: usedHost, to: showProvider });
+    void loadStream(String(currentEpisode), {
+      providerId: resolvedProviderIdRef.current ?? undefined,
+      provider: showProvider,
+    });
+  }, [
+    currentEpisode,
+    disabledHistoryProvider,
+    episode,
+    loadStream,
+    showProvider,
+    streamProviderOverride,
+  ]);
+
+  /**
+   * Last resort when no enabled host could resolve the id at all.
+   *
+   * The stored id may be stale (renamed slug, removed catalogue entry) while the
+   * show is still on that host under another id. Look it up by title with the
+   * same scored matcher the Host menu uses; the lookup refuses weak matches, so a
+   * show that is genuinely missing stays an error instead of silently becoming a
+   * different title.
+   */
+  useEffect(() => {
+    if (!episode || disabledHistoryProvider) return;
+    if (!showError) return;
+    const provider = streamProviderOverride ?? activeProviderName;
+    if (!provider) return;
+    const attemptKey = `title:${episode.id}:${String(currentEpisode)}:${provider}`;
+    if (recoveryAttemptRef.current === attemptKey) return;
+    recoveryAttemptRef.current = attemptKey;
+
+    void (async () => {
+      const resolved = await resolveShowOnProvider(
+        provider,
+        showTitleCandidates,
+        anilistMediaIdForLookup,
+        currentEpisode
+      );
+      // Same id the failing request already used: the title was never the
+      // problem, so retrying with it would only fail again.
+      if (!resolved || resolved.providerId === resolvedProviderIdRef.current) return;
+      logPlaybackInfo("title-recovery", {
+        provider,
+        from: resolvedProviderIdRef.current,
+        to: resolved.providerId,
+      });
+      resolvedProviderIdRef.current = resolved.providerId;
+      setResolvedProviderId(resolved.providerId);
+      await loadStream(String(currentEpisode), {
+        providerId: resolved.providerId,
+        provider,
+      });
+    })();
+  }, [
+    activeProviderName,
+    anilistMediaIdForLookup,
+    currentEpisode,
+    disabledHistoryProvider,
+    episode,
+    loadStream,
+    resolveShowOnProvider,
+    showError,
+    showTitleCandidates,
+    streamProviderOverride,
   ]);
 
   useEffect(() => {
@@ -985,9 +1233,10 @@ export function WatchPage() {
    * Two things make it more than a flag flip:
    *
    *  - Provider ids are host-specific, so the show is looked up again on the
-   *    target host. The match is made on the AniList id when the result exposes
-   *    one (`episode.id`), which is stable across hosts; otherwise the first hit
-   *    is used, mirroring `resolveProviderForAniListMedia`.
+   *    target host. The match is scored on the AniList id and the title, and it
+   *    refuses to answer when the candidates disagree about the season
+   *    (see `lib/show-matching.ts`) — opening the wrong season is what made host
+   *    switching look broken.
    *  - Playback position is carried over, so switching hosts does not restart
    *    the episode.
    */
@@ -1001,12 +1250,17 @@ export function WatchPage() {
         const resumeFrom = videoRef.current?.currentTime ?? null;
 
         try {
-          if (!showTitleForLookup) {
+          if (showTitleCandidates.length === 0) {
             setError("Cannot switch host: the show title is unknown.");
             return;
           }
 
-          const resolved = await resolveShowOnProvider(nextProvider, showTitleForLookup);
+          const resolved = await resolveShowOnProvider(
+            nextProvider,
+            showTitleCandidates,
+            anilistMediaIdForLookup,
+            currentEpisode
+          );
           if (!resolved) {
             setError(
               `This show is not available on the selected host. Try another one from the Host menu.`
@@ -1036,9 +1290,10 @@ export function WatchPage() {
     },
     [
       currentEpisode,
+      anilistMediaIdForLookup,
       loadStream,
       resolveShowOnProvider,
-      showTitleForLookup,
+      showTitleCandidates,
       streamProviderOverride,
     ]
   );
