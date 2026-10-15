@@ -2,7 +2,7 @@
 
 # animePLUS
 
-[Features](#features) | [Installation](#installation) | [Building](#building) | [License](#license)
+[Features](#features) | [Stream sources](#stream-sources) | [Installation](#installation) | [Building](#building) | [License](#license)
 
 ![Home Page Screen](./assets/home.png)
 
@@ -15,10 +15,32 @@ Built and maintained by **Luiss896**.
 - Stay up to date with the most recently uploaded anime
 - Browse and search for a specific anime series
 - Sub / dub support
+- **Multiple stream sources with live host switching** — change provider mid-episode without losing your position, for when one source lacks the episode or its subtitles
+- **Subtitle controls** — pick a track (including Italian where the source carries it), turn subtitles off, and adjust text size, background opacity and colour. Preferences persist between sessions
+- **AniList integration** — your list drives the *Following* page (what airs today and what comes next) and the *Continue watching* row, with one-click removal per show
 - **Anime4K upscaling over WebGPU** with selectable presets (A, B, C, A+A, GAN)
 - **Native-resolution output**: the shader renders straight to your monitor's pixel grid (e.g. 1080p → 1440p at 1:1), instead of letting the compositor rescale the result
 - Adjustable output resolution: source, display, 1080p, 1440p or 4K
 - Quality warning when a stream has no 1080p rendition available
+
+## Stream sources
+
+Sources are toggled in `desktop/src/shared/stream-providers.config.ts`; each one is compiled
+and instantiated regardless, so enabling or disabling is a one-line change.
+
+| Source | Status | Notes |
+|---|---|---|
+| **HiAnime** | Enabled | Primary. Reports a full quality ladder, so the quality selector and the 1080p warning are meaningful. The source most likely to carry subtitles, including Italian on some titles. |
+| **AnimeUnity** | Enabled | Italian fallback. Japanese audio with **Italian subtitles burned into the video**, so they cannot be toggled — the subtitle panel says so rather than showing dead controls. |
+| **Reanime** | Enabled | Subtitle fallback. Many tracks per show (3–14) in `.ass`, which the local proxy converts to WebVTT on the fly. Adds Italian titles HiAnime lacks. |
+| AllAnime | Disabled | Upstream broke: the `episode` query now requires `translationType`, and its request-signing crypto must be scraped from an obfuscated bundle. |
+| AnimeParadise | Disabled | Works, but carries no subtitle tracks at all. |
+| AniDB, AnimePahe, Senshi | Disabled | Search currently fails or returns nothing. |
+
+> **On Italian subtitles:** no free source carries them for every title. Coverage was measured
+> across 15 popular shows — HiAnime had a working Italian track on 4, Reanime on 2, and between
+> them they cover the available titles. If a show has no Italian track, switch host from the
+> player and check again.
 
 ## Installation
 
@@ -28,23 +50,31 @@ Download the latest `animePLUS-*.Setup.exe` from the [releases page](../../relea
 
 The build is not code-signed, so SmartScreen may warn you on first launch. Choose *More info → Run anyway*, or verify the source yourself — the full source is in this repository.
 
-### OSX
+### Linux and macOS
 
-Download the latest `animePLUS-darwin-arm64-*.zip` from the [releases page](../../releases).
+> **Windows only for now.** Current releases ship a Windows installer. Linux and macOS builds are
+> **planned future work** and are not produced by the current CI — the sections below describe the
+> intended packaging, not a download that exists today. To run on those platforms in the meantime,
+> build from source (see [Building](#building)).
 
-Since the application is not signed or notarized, you will have to run this command via terminal:
+#### macOS (planned)
+
+Once published, the release will be a `animePLUS-darwin-arm64-*.zip`. Because the application is not
+signed or notarized, macOS will attach a `com.apple.quarantine` flag, and Gatekeeper may refuse to
+launch it. Clearing that flag is the workaround:
 
 ```bash
 xattr -cr /Applications/animePLUS.app
 ```
 
-**Why do I need to do this?**
+Downloading an app from outside the App Store attaches `com.apple.quarantine` to it; if the app is
+not correctly signed, Gatekeeper blocks it. Running `xattr -cr` on the application folder wipes
+those flags, so macOS treats the file as locally created and allows it to run.
 
-When you download an app from outside the App Store, macOS attaches a `com.apple.quarantine` attribute to it. If the app isn't digitally signed correctly, Gatekeeper may block it. Running `xattr -cr` on the application folder wipes those security flags, essentially "tricking" macOS into thinking the file was created locally rather than downloaded, allowing it to run.
+#### Linux (planned)
 
-### Linux (Experimental)
-
-`.rpm` and `.deb` packages are published with each release. Linux is not actively optimized — if something is broken, please open an issue.
+`.rpm` and `.deb` packages are the intended output. Linux has never been actively optimized — if
+something is broken there, please open an issue.
 
 ## Building
 
@@ -70,9 +100,31 @@ FFmpeg is downloaded automatically on install and before packaging; the binary i
 
 ## Additional Screenshots
 
+### Player and subtitle controls
+
+Pick a track — Italian included when the source carries it — then adjust text size, background
+opacity and colour. The appearance settings are remembered between sessions.
+
+![Player with subtitle controls open](./assets/player-subtitles.png)
+
+### Following
+
+What airs today and what is coming next, straight from your AniList list. Every card opens the
+show in the app, not in a browser.
+
+![Following page](./assets/following.png)
+
+### Search
+
 ![Search Page](./assets/search.png)
 
+### Show details
+
 ![Show Details Page](./assets/show-details.png)
+
+### Settings
+
+![Settings Page](./assets/settings.png)
 
 ## Legal
 
