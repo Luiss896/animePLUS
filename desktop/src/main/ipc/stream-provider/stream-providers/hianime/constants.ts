@@ -37,19 +37,26 @@ export function hianimeSlug(providerId: string): string {
  * Trailing numeric catalog id used by `/api/theme/episode/list/{id}`.
  * `steinsgate-0-2640` → `2640` (not the first hyphen suffix).
  *
- * A leading numeric segment means this is another provider's id (AnimeUnity
- * publishes `{numericId}-{slug}`, e.g. `6722-dan-da-dan-2`). Without this guard
- * the trailing-number rule would read that id as catalog `2` and quietly look up
- * a completely different anime, which surfaced much later as a confusing
- * "episode not found". Failing loudly here names the real problem.
+ * ## Do NOT add a "looks like another provider's id" guard here
+ *
+ * An earlier revision rejected any id whose leading segment was numeric, on the
+ * assumption that AnimeUnity's `{numericId}-{slug}` shape was distinguishable
+ * from HiAnime's `{slug}-{numericId}` shape. That assumption is false: HiAnime
+ * genuinely serves ids of the form `{digits}-{slug}`, and the site confirms it —
+ * `https://hianime.at/7775-the-ramparts-of-ice-2` returns HTTP 200.
+ *
+ * The guard therefore broke real shows. Fetching episodes for
+ * `7775-the-ramparts-of-ice-2` threw
+ * "HiAnime provider id looks like another provider's id (leading numeric segment)",
+ * which surfaced in the UI as a 502 on the watch page.
+ *
+ * The two id spaces overlap in shape and cannot be told apart from the string
+ * alone. Callers must ensure the id came from the same provider they are passing
+ * it to; see `providerIdBelongsToProvider` in the watch page for the (also
+ * imperfect) cross-host handling.
  */
 export function hianimeAnimeId(providerId: string): string {
   const slug = hianimeSlug(providerId);
-  if (/^\d+-/.test(slug)) {
-    throw new Error(
-      `HiAnime provider id looks like another provider's id (leading numeric segment): ${providerId}`
-    );
-  }
   const match = /-(\d+)$/.exec(slug);
   if (!match?.[1]) {
     throw new Error(`Invalid HiAnime provider id: ${providerId}`);
