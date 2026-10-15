@@ -1,4 +1,4 @@
-﻿import { Heart, List } from "lucide-react";
+import { Heart, List } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -232,7 +232,7 @@ export function BookmarksPage() {
         )}
 
         {navigatingId != null && (
-          <p className="mb-4 text-sm text-muted-foreground">Finding stream sourceâ€¦</p>
+          <p className="mb-4 text-sm text-muted-foreground">Finding stream source…</p>
         )}
 
         <TabsContent value={activeTab} className="mt-0">

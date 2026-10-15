@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import { AniListConnectDialog } from "@/renderer/components/anilist-connect-dialog";
 import { PalettePicker } from "@/renderer/components/palette-picker";
@@ -265,11 +265,11 @@ export function SettingsPage() {
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm sm:max-w-md">
             <dt className="text-muted-foreground">Current</dt>
             <dd className="font-mono tabular-nums">
-              {updateLoading ? "Ã¢â‚¬Â¦" : (updateCheck?.currentVersion ?? "Ã¢â‚¬â€")}
+              {updateLoading ? "…" : (updateCheck?.currentVersion ?? "—")}
             </dd>
             <dt className="text-muted-foreground">Latest</dt>
             <dd className="font-mono tabular-nums">
-              {updateLoading ? "Ã¢â‚¬Â¦" : (updateCheck?.latestVersion ?? "Ã¢â‚¬â€")}
+              {updateLoading ? "…" : (updateCheck?.latestVersion ?? "—")}
             </dd>
           </dl>
 
@@ -283,11 +283,20 @@ export function SettingsPage() {
           </Button>
         </div>
 
-        {updateCheck?.error && (
+        {/*
+          `no-releases` means the repository is reachable but has not published a
+          release yet. That is worth telling the user, but it is not a failure —
+          showing it in red alongside real errors made a healthy app look broken.
+        */}
+        {updateCheck?.error === "no-releases" ? (
+          <p className="text-sm text-muted-foreground">
+            No releases published yet, so there is nothing to compare against.
+          </p>
+        ) : updateCheck?.error ? (
           <p className="text-sm text-destructive" role="alert">
             Could not check for updates ({updateCheck.error}).
           </p>
-        )}
+        ) : null}
       </Card>
 
       <Card as="section" className="p-5 flex flex-col gap-6">
@@ -308,7 +317,7 @@ export function SettingsPage() {
             )}
             <p className="text-sm text-muted-foreground">
               {anilistStatusLoading
-                ? "Ã¢â‚¬Â¦"
+                ? "…"
                 : anilistStatus?.connected && anilistStatus.username
                   ? `Signed in as ${anilistStatus.username}.`
                   : "Not connected."}
@@ -339,7 +348,7 @@ export function SettingsPage() {
                   void onAnilistDisconnect();
                 }}
               >
-                {anilistDisconnectBusy ? "DisconnectingÃ¢â‚¬Â¦" : "Disconnect"}
+                {anilistDisconnectBusy ? "Disconnecting…" : "Disconnect"}
               </Button>
             </div>
           </div>
@@ -485,7 +494,7 @@ export function SettingsPage() {
             void onOpenLogsDirectory();
           }}
         >
-          {openLogsBusy ? "OpeningÃ¢â‚¬Â¦" : "Open"}
+          {openLogsBusy ? "Opening…" : "Open"}
         </Button>
       </Card>
     </div>

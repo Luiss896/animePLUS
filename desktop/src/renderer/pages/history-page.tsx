@@ -1,4 +1,4 @@
-﻿import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -44,7 +44,7 @@ function progressBadgeLabel(entry: HistoryEntry): string {
   if (cur > 0) {
     return formatDurationMs(cur);
   }
-  return "â€”";
+  return "—";
 }
 
 function isWatchCompleted(entry: HistoryEntry): boolean {
