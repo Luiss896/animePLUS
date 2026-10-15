@@ -127,18 +127,58 @@ export function maxVariantHeight(variants: HlsVideoVariant[]): number | null {
   return known.length > 0 ? (known[0]!.height ?? null) : null;
 }
 
+/**
+ * Query parameters that CDNs regenerate on every request.
+ *
+ * VixCloud signs each rendition URI individually, so the same 1080p rendition
+ * carries a different `token` on every fetch. Those values identify nothing
+ * about *which* rendition a URI points at, so they are ignored when comparing.
+ */
+const VOLATILE_QUERY_PARAMS = new Set([
+  "token",
+  "expires",
+  "edge",
+  "asn",
+  "h",
+  "signature",
+  "sig",
+]);
+
+/** Query string with volatile signature parameters removed, order-normalised. */
+function stableQuery(url: URL): string {
+  const pairs: string[] = [];
+  url.searchParams.forEach((value, key) => {
+    if (VOLATILE_QUERY_PARAMS.has(key.toLowerCase())) return;
+    pairs.push(`${key}=${value}`);
+  });
+  return pairs.sort().join("&");
+}
+
 function urlsLooselyEqual(a: string, b: string): boolean {
   if (a === b) return true;
   try {
-    const pathA = a.includes("://") ? new URL(a).pathname : a.replace(/^\.\//, "");
-    const pathB = b.includes("://") ? new URL(b).pathname : b.replace(/^\.\//, "");
-    return (
+    const urlA = a.includes("://") ? new URL(a) : null;
+    const urlB = b.includes("://") ? new URL(b) : null;
+    const pathA = urlA ? urlA.pathname : a.replace(/^\.\//, "");
+    const pathB = urlB ? urlB.pathname : b.replace(/^\.\//, "");
+    const pathMatches =
       pathA === pathB ||
       pathA.endsWith(`/${pathB}`) ||
       pathB.endsWith(`/${pathA}`) ||
       pathA.endsWith(pathB) ||
-      pathB.endsWith(pathA)
-    );
+      pathB.endsWith(pathA);
+    if (!pathMatches) return false;
+
+    // Some CDNs serve every rendition from one path and distinguish them only in
+    // the query string (VixCloud: `/playlist/326682?type=video&rendition=1080p`).
+    // Comparing paths alone made all renditions look identical, so nothing was
+    // ever filtered out and the master kept its whole ladder instead of
+    // collapsing to the requested quality. When both sides carry a query, the
+    // non-volatile parameters have to agree as well.
+    if (urlA && urlB) {
+      return stableQuery(urlA) === stableQuery(urlB);
+    }
+    return true;
   } catch {
     return false;
   }
