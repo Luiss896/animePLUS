@@ -441,6 +441,32 @@
   .oa-glow-ring {
     box-shadow: 0 0 0 1px hsl(var(--accent-glow) / 0.5);
   }
+
+  /**
+   * Subtitle appearance.
+   *
+   * Tracks are attached as native <track> elements, so the only styling hook is
+   * `::cue`. Tailwind cannot express `::cue`, and the values must be adjustable
+   * live from the player, hence the CSS custom properties: React writes them
+   * onto the player root and the cue rule reads them.
+   *
+   * `line-height` and `padding` are deliberately included — without them the
+   * background box hugs each line separately and multi-line cues look cramped.
+   */
+  .oa-cue-scope video::cue {
+    font-size: var(--oa-cue-size, 20px);
+    line-height: 1.35;
+    color: var(--oa-cue-color, #ffffff);
+    background-color: rgb(0 0 0 / var(--oa-cue-bg-opacity, 0.75));
+    /* `font-family` is intentionally NOT set: `::cue` only accepts a limited
+       property set in some engines, and overriding it breaks the default
+       glyph fallback that keeps non-Latin cues readable. */
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.9);
+    padding: 0.15em 0.35em;
+    border-radius: 0.15em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
 }
 
 @keyframes oa-fade-rise {
