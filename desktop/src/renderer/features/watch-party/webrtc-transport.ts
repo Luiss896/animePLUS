@@ -189,6 +189,8 @@ function createDataChannelTransport(
   const queue: string[] = [];
   let closed = false;
   let channel: RTCDataChannel | null = null;
+  /** Whether the channel ever reached `open`, which decides how a failure reads. */
+  let everOpened = false;
   /** Latest diagnostics, so a failure can explain itself instead of guessing. */
   let lastDiagnostics: PartyDiagnostics | null = null;
 
@@ -217,6 +219,7 @@ function createDataChannelTransport(
     .then((openedChannel) => {
       channel = openedChannel;
       openedChannel.addEventListener("open", () => {
+        everOpened = true;
         handlers.onStatus({ state: "connected" });
         flush();
       });
@@ -232,6 +235,7 @@ function createDataChannelTransport(
       });
       // The channel may already be open by the time this resolves.
       if (openedChannel.readyState === "open") {
+        everOpened = true;
         handlers.onStatus({ state: "connected" });
         flush();
       }
@@ -245,9 +249,30 @@ function createDataChannelTransport(
 
   pc.addEventListener("connectionstatechange", () => {
     const state = pc.connectionState;
-    if (state === "failed") {
+    if (state !== "failed") {
+      if (state === "disconnected" && everOpened) handlers.onStatus({ state: "closed" });
+      return;
+    }
+
+    if (everOpened) {
+      // It was working and stopped: a real failure.
       handlers.onStatus({ state: "error", error: describeFailure(lastDiagnostics) });
-    } else if (state === "disconnected") handlers.onStatus({ state: "closed" });
+      return;
+    }
+
+    /*
+     * Failed before the channel ever opened, which on the guest is the normal state
+     * while the host has not pasted the answer code yet: its ICE has nothing to talk
+     * to and gives up after roughly thirty seconds, then revives on its own once the
+     * host applies the answer. Reporting that as a fatal error accused the user of a
+     * failure that had not happened — and the message then outlived the problem,
+     * sitting above a green "Connected" badge.
+     */
+    handlers.onStatus({
+      state: "connecting",
+      notice:
+        "Waiting for the host to paste your answer code. If they already did and this persists, one of the networks is blocking the direct connection.",
+    });
   });
 
   return {

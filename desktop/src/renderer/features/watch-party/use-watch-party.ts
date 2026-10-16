@@ -74,6 +74,13 @@ export type WatchPartySession = {
   selfReady: boolean;
   /** Internet only: what the connection attempt actually did. */
   diagnostics: PartyDiagnostics | null;
+  /**
+   * Non-fatal information about a session that is still trying.
+   *
+   * Separate from `error` so "the host has not pasted the code yet" is not shown as
+   * a failure.
+   */
+  notice: string | null;
 };
 
 export type WatchPartyActions = {
@@ -123,6 +130,7 @@ const IDLE_SESSION: WatchPartySession = {
   guestBuffering: false,
   selfReady: false,
   diagnostics: null,
+  notice: null,
 };
 
 /** Six digits, matching what the LAN host shows. */
@@ -277,7 +285,15 @@ export function useWatchPartySession(options: {
     (status: PartyTransportStatus) => {
       patch({
         status: status.state,
-        ...(status.error ? { error: status.error } : {}),
+        /*
+         * Assigned unconditionally, `null` included. Spreading it in only when
+         * present — `...(status.error ? { error } : {})` — left a stale error on
+         * screen forever: the guest's ICE failed while it waited for the host, the
+         * error was recorded, the connection then came up, and the badge turned green
+         * while the red banner stayed underneath it.
+         */
+        error: status.error ?? null,
+        notice: status.notice ?? null,
         // A dropped guest is no longer present; keeping the name would show a
         // phantom participant.
         ...(status.state === "listening" || status.state === "closed"

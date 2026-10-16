@@ -12,7 +12,17 @@ export type PartyTransportKind = "lan" | "webrtc";
 /** Connection state as reported by the transport. Mirrors the main-process shape. */
 export type PartyTransportStatus = {
   state: "idle" | "listening" | "connecting" | "connected" | "closed" | "error";
+  /** Fatal: the session will not recover on its own. Cleared when one arrives without it. */
   error?: string;
+  /**
+   * Non-fatal information about a session that is still trying.
+   *
+   * Exists because "ICE failed" and "the other person has not pasted the code yet"
+   * look identical from the guest's side. Reporting the first as a hard error told
+   * the user their connection had failed while it was simply waiting — and the
+   * message then stayed on screen even after the connection came up.
+   */
+  notice?: string;
 };
 
 export type PartyTransportHandlers = {

@@ -120,6 +120,20 @@ export function PartyPage() {
         </Badge>
       </div>
 
+      {/*
+        Amber, not red: the session is still trying. The guest sees this while the
+        host has not pasted the answer code yet, which used to be reported as a
+        failure it had not suffered.
+      */}
+      {session.notice ? (
+        <p
+          data-party-notice
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-500"
+        >
+          {session.notice}
+        </p>
+      ) : null}
+
       {session.error ? (
         <div
           data-party-error
