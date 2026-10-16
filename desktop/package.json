@@ -1,7 +1,7 @@
 {
   "name": "animeplus",
   "productName": "animePLUS",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "animePLUS — an easy to use anime desktop app with a provider-based architecture, combining a familiar streaming workflow with a modern UI. Includes Anime4K WebGPU upscaling.",
   "repository": {
     "type": "git",
