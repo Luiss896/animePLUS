@@ -10,6 +10,7 @@ import {
 import { WatchVideoPlayerShell } from "@/renderer/components/player/watch-video-player-shell";
 import { PartyStatusBar } from "@/renderer/components/watch-party/party-status-bar";
 import { Button } from "@/renderer/components/ui/button";
+import { useWatchParty } from "@/renderer/features/watch-party/party-provider";
 import { usePartyPlayerBridge } from "@/renderer/features/watch-party/use-party-player";
 import { useGoBack } from "@/renderer/hooks/use-go-back";
 import { useWatchedEpisodes, showIdCandidates } from "@/renderer/hooks/use-watched-episodes";
@@ -367,12 +368,105 @@ export function WatchPage() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  const { session: partySession, actions: partyActions } = useWatchParty();
+
+  /**
+   * The provider id the series page — and a party guest — can actually resolve.
+   *
+   * Declared here rather than next to the sidebar link because the party publish
+   * effect below needs it too. `showDetails.providerId` is authoritative (the id the
+   * provider itself answered with); every other source can carry an AniList media
+   * id, and a bare integer is not a provider id — navigating with one produced
+   * `hianime.at/watch/134131` → 404, so those are rejected rather than sent.
+   */
+  const showPageProviderId = useMemo(() => {
+    const clean = (value?: string | null): string =>
+      typeof value === "string" ? value.trim() : "";
+    const fromDetails = clean(showDetails?.providerId);
+    if (fromDetails) return fromDetails;
+    return (
+      [clean(resolvedProviderIdRef.current), clean(episode?.providerId), clean(episode?.id)].find(
+        (value) => value && !/^\d+$/.test(value)
+      ) ?? null
+    );
+  }, [showDetails?.providerId, episode?.providerId, episode?.id]);
+
+  /**
+   * Guest: the host's episode changes are handled by the provider — navigation has
+   * to work from any page, including when this page is not mounted at all.
+   */
+
   /*
    * Watch party wiring. Deliberately placed here, before the early returns below:
    * hooks must run on every render, and `videoRef` has to exist first. Renders
    * nothing when no party is active.
    */
   const { driftMs: partyDriftMs } = usePartyPlayerBridge({ videoRef });
+
+  /** Host: announce the current episode so the guest can load its own copy. */
+  const { publishShow } = partyActions;
+  useEffect(() => {
+    if (partySession.role !== "host") return;
+    if (!showPageProviderId || !episode) return;
+    const title =
+      showDetails?.title.english ??
+      showDetails?.title.romaji ??
+      showDetails?.title.native ??
+      episode.showName ??
+      episode.title.english ??
+      "";
+    void publishShow({
+      provider: showProvider ?? DEFAULT_STREAM_PROVIDER,
+      providerId: showPageProviderId,
+      anilistMediaId: showDetails?.anilistMediaId ?? null,
+      title,
+      episodeIndex: currentEpisode,
+      mode: playbackMode,
+    });
+  }, [
+    partySession.role,
+    showPageProviderId,
+    episode,
+    showDetails?.title.english,
+    showDetails?.title.romaji,
+    showDetails?.title.native,
+    showDetails?.anilistMediaId,
+    showProvider,
+    currentEpisode,
+    playbackMode,
+    publishShow,
+  ]);
+
+  /**
+   * Host: hold playback while a guest that is still loading cannot play.
+   *
+   * Bounded: if the guest's stream never resolves, the host must not be stuck
+   * paused forever — it plays on and the guest catches up by drift correction.
+   */
+  useEffect(() => {
+    if (partySession.role !== "host") return;
+    if (!partySession.guestConnected) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (partySession.guestReady) {
+      if (video.paused) void video.play().catch(() => undefined);
+      return;
+    }
+    if (partySession.guestBuffering) return; // transient: let the guest recover
+    if (!video.paused) video.pause();
+
+    const id = setTimeout(() => {
+      const el = videoRef.current;
+      if (el?.paused) void el.play().catch(() => undefined);
+    }, 15000);
+    return () => clearTimeout(id);
+  }, [
+    partySession.role,
+    partySession.guestConnected,
+    partySession.guestReady,
+    partySession.guestBuffering,
+  ]);
 
   const lastHistoryEntryRef = useRef<HistoryEntry | null>(null);
   /** Upstream stream URL currently being transcoded (for cancel-on-exit). */
@@ -1172,18 +1266,6 @@ export function WatchPage() {
    * and a bare integer is not a provider id. Navigating with one produced
    * `hianime.at/watch/134131` → 404, so such ids are rejected rather than sent.
    */
-  const showPageProviderId = useMemo(() => {
-    const clean = (value?: string | null): string =>
-      typeof value === "string" ? value.trim() : "";
-    const fromDetails = clean(showDetails?.providerId);
-    if (fromDetails) return fromDetails;
-    return (
-      [clean(resolvedProviderIdRef.current), clean(episode?.providerId), clean(episode?.id)].find(
-        (value) => value && !/^\d+$/.test(value)
-      ) ?? null
-    );
-  }, [showDetails?.providerId, episode?.providerId, episode?.id]);
-
   const openShowPage = useCallback(() => {
     if (!showPageProviderId) return;
     const params = new URLSearchParams({ providerId: showPageProviderId });

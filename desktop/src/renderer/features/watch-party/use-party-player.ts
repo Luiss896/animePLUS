@@ -68,9 +68,9 @@ export function usePartyPlayerBridge(options: {
    */
   const roleRef = useRef(session.role);
   roleRef.current = session.role;
-  const { sendPlay, sendPause, sendSeek, reportReady, reportBuffering } = actions;
-  const actionsRef = useRef({ sendPlay, sendPause, sendSeek, reportReady, reportBuffering });
-  actionsRef.current = { sendPlay, sendPause, sendSeek, reportReady, reportBuffering };
+  const { sendPlay, sendPause, sendSeek, reportState } = actions;
+  const actionsRef = useRef({ sendPlay, sendPause, sendSeek, reportState });
+  actionsRef.current = { sendPlay, sendPause, sendSeek, reportState };
 
   const adapter = useMemo(
     () => ({
@@ -88,6 +88,13 @@ export function usePartyPlayerBridge(options: {
             break;
           case "heartbeat":
             engine.handleHeartbeat(msg, msg.rttMs ?? rttRef.current, Date.now());
+            break;
+          case "show":
+            // A new episode means a new stream. Stop the old one so the guest does
+            // not keep playing the previous episode behind the new page; navigation
+            // itself is the provider's job.
+            engine.reset();
+            videoRef.current?.pause();
             break;
           default:
             break;
@@ -132,28 +139,39 @@ export function usePartyPlayerBridge(options: {
   /**
    * Guest: report readiness and stalls.
    *
-   * The host uses this to know whether the other side can actually play before it
-   * resumes; without it the guest silently falls behind while its stream loads.
+   * Both flags are computed together so the host always receives a coherent
+   * picture; reporting them independently meant one call cleared the other field.
    */
   useEffect(() => {
     if (session.role !== "guest" || !videoEl) return;
 
-    const ready = () => actionsRef.current.reportReady(true, videoEl.currentTime);
-    const stalled = () => actionsRef.current.reportBuffering(true, videoEl.currentTime);
-    const resumed = () => actionsRef.current.reportBuffering(false, videoEl.currentTime);
+    /*
+     * `ready` means "this player can start on command": it has data for the current
+     * position. Deriving it from `readyState` rather than latching it once on
+     * `canplay` keeps it correct across an episode change, when the element is
+     * briefly empty again and the host must not resume into a black frame.
+     */
+    const report = () => {
+      const canPlay = videoEl.readyState >= 3 && Number.isFinite(videoEl.duration);
+      const buffering = videoEl.readyState < 3 && !videoEl.paused && !videoEl.ended;
+      actionsRef.current.reportState(canPlay, buffering, videoEl.currentTime);
+    };
 
-    videoEl.addEventListener("loadeddata", ready);
-    videoEl.addEventListener("canplay", ready);
-    videoEl.addEventListener("waiting", stalled);
-    videoEl.addEventListener("playing", resumed);
-    videoEl.addEventListener("seeked", resumed);
+    videoEl.addEventListener("loadeddata", report);
+    videoEl.addEventListener("canplay", report);
+    videoEl.addEventListener("waiting", report);
+    videoEl.addEventListener("playing", report);
+    videoEl.addEventListener("seeked", report);
+    videoEl.addEventListener("emptied", report);
+    report();
 
     return () => {
-      videoEl.removeEventListener("loadeddata", ready);
-      videoEl.removeEventListener("canplay", ready);
-      videoEl.removeEventListener("waiting", stalled);
-      videoEl.removeEventListener("playing", resumed);
-      videoEl.removeEventListener("seeked", resumed);
+      videoEl.removeEventListener("loadeddata", report);
+      videoEl.removeEventListener("canplay", report);
+      videoEl.removeEventListener("waiting", report);
+      videoEl.removeEventListener("playing", report);
+      videoEl.removeEventListener("seeked", report);
+      videoEl.removeEventListener("emptied", report);
     };
   }, [session.role, videoEl]);
 

@@ -7,8 +7,10 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import type { PartyMessage, PartyShow } from "@/shared/watch-party/protocol";
+import type { Episode } from "@/shared/types";
 
 import {
   useWatchPartySession,
@@ -29,8 +31,6 @@ export type PartyPlayerAdapter = {
   applyCommand: (msg: PartyMessage) => void;
   /** Host: current playback facts for the heartbeat. */
   getSnapshot: () => PartyPlaybackSnapshot;
-  /** Guest: the host switched show or episode. */
-  onShowChange?: (show: PartyShow) => void;
 };
 
 type WatchPartyContextValue = {
@@ -47,6 +47,8 @@ const WatchPartyContext = createContext<WatchPartyContextValue | null>(null);
 export function WatchPartyProvider({ children }: { children: React.ReactNode }) {
   const [displayName, setDisplayNameState] = useState("Ospite");
   const playerRef = useRef<PartyPlayerAdapter | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     let cancelled = false;
@@ -74,9 +76,50 @@ export function WatchPartyProvider({ children }: { children: React.ReactNode }) 
     playerRef.current?.applyCommand(msg);
   }, []);
 
-  const onRemoteShow = useCallback((show: PartyShow) => {
-    playerRef.current?.onShowChange?.(show);
-  }, []);
+  /**
+   * Guest: follow the host to whatever it is watching.
+   *
+   * Handled here rather than in the player adapter because it is a routing concern
+   * and must work from *any* page: a guest sitting on `/party` when the host starts
+   * an episode has no watch page mounted, so no adapter is attached, and routing
+   * the message through the player silently dropped it — the guest simply never
+   * followed.
+   *
+   * Each side resolves its own stream for the announced identity: provider URLs are
+   * short-lived and host-bound, and the two need not have the same provider enabled.
+   */
+  const locationRef = useRef<unknown>(location.state);
+  locationRef.current = location.state;
+  const onRemoteShow = useCallback(
+    (show: PartyShow) => {
+      const current = (locationRef.current as { episode?: Episode } | null)?.episode;
+      // Already watching this episode? Re-navigating would restart the stream.
+      if (
+        current?.providerId === show.providerId &&
+        current.index === show.episodeIndex &&
+        current.mode === show.mode
+      ) {
+        return;
+      }
+      navigate("/watch", {
+        state: {
+          episode: {
+            // Both ids carry the provider id: that is what the details lookup
+            // takes, and an AniList id would be meaningless to the provider.
+            id: show.providerId,
+            providerId: show.providerId,
+            title: { english: show.title },
+            thumbnail: null,
+            index: show.episodeIndex,
+            mode: show.mode,
+            showName: show.title,
+          },
+          providerOverride: show.provider,
+        },
+      });
+    },
+    [navigate]
+  );
 
   const { session, actions } = useWatchPartySession({
     displayName,

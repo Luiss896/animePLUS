@@ -46,6 +46,17 @@ export type WatchPartySession = {
   show: PartyShow | null;
   /** Host only: whether a guest is currently attached. */
   guestConnected: boolean;
+  /**
+   * Host only: the guest reported its player can play.
+   *
+   * Distinct from `guestConnected`, which only means the transport is up. A guest
+   * that has just been told to switch episode is connected but cannot play yet,
+   * and starting without waiting leaves it tens of seconds behind while its stream
+   * resolves.
+   */
+  guestReady: boolean;
+  /** Host only: the guest's player is starved. Surfaced in the status bar. */
+  guestBuffering: boolean;
   /** Guest only: whether its own player is ready to be driven. */
   selfReady: boolean;
 };
@@ -59,9 +70,15 @@ export type WatchPartyActions = {
   sendPlay: (at: number) => Promise<void>;
   sendPause: (at: number) => Promise<void>;
   sendSeek: (at: number) => Promise<void>;
-  /** Guest: tell the host this side is ready (or no longer able). */
-  reportReady: (ready: boolean, position: number) => void;
-  reportBuffering: (buffering: boolean, position: number) => void;
+  /**
+   * Guest: report the player's state upstream.
+   *
+   * One call for both flags on purpose. Two separate helpers each cleared the other
+   * field — `reportBuffering(false, …)` sent `ready: false` — so the host could
+   * never see a guest that was ready, and a host waiting on readiness would have
+   * waited forever.
+   */
+  reportState: (ready: boolean, buffering: boolean, position: number) => void;
   /** Host: playback facts to publish in the next heartbeat. */
   setPlaybackSource: (source: () => PartyPlaybackSnapshot) => void;
 };
@@ -76,6 +93,8 @@ const IDLE_SESSION: WatchPartySession = {
   lastHeartbeatAt: null,
   show: null,
   guestConnected: false,
+  guestReady: false,
+  guestBuffering: false,
   selfReady: false,
 };
 
@@ -142,8 +161,14 @@ export function useWatchPartySession(options: {
           patch({ peerName: msg.hostName || null, show: msg.show ?? null });
           break;
         case "ready":
-          // Host side: the guest attached.
-          patch({ peerName: msg.name || null, guestConnected: true });
+          // Host side: the guest attached. Readiness is not assumed — it is
+          // reported separately once the guest's own player can play.
+          patch({
+            peerName: msg.name || null,
+            guestConnected: true,
+            guestReady: false,
+            guestBuffering: false,
+          });
           break;
         case "show":
           patch({ show: msg.show });
@@ -166,14 +191,22 @@ export function useWatchPartySession(options: {
           if (role === "host") patch({ latencyMs: Date.now() - msg.sentAt });
           break;
         case "state":
-          // Host side telemetry; the caller reads it through `onRemoteCommand`.
-          if (role === "host") onRemoteCommandRef.current?.(msg);
+          // Host side telemetry: is the other end actually able to play?
+          if (role === "host") {
+            patch({ guestReady: msg.ready, guestBuffering: msg.buffering });
+            onRemoteCommandRef.current?.(msg);
+          }
           break;
         case "requestSync":
           if (role === "host") onRemoteCommandRef.current?.(msg);
           break;
         case "bye":
-          patch({ guestConnected: false, peerName: null });
+          patch({
+            guestConnected: false,
+            guestReady: false,
+            guestBuffering: false,
+            peerName: null,
+          });
           break;
       }
     },
@@ -188,7 +221,7 @@ export function useWatchPartySession(options: {
         // A dropped guest is no longer present; keeping the name would show a
         // phantom participant.
         ...(status.state === "listening" || status.state === "closed"
-          ? { guestConnected: false, peerName: null }
+          ? { guestConnected: false, guestReady: false, guestBuffering: false, peerName: null }
           : {}),
       });
     },
@@ -332,9 +365,7 @@ export function useWatchPartySession(options: {
       sendPlay: (at: number) => sendCommand({ t: "play", at }),
       sendPause: (at: number) => sendCommand({ t: "pause", at }),
       sendSeek: (at: number) => sendCommand({ t: "seek", at }),
-      reportReady: (ready: boolean, position: number) => reportState(ready, false, position),
-      reportBuffering: (buffering: boolean, position: number) =>
-        reportState(false, buffering, position),
+      reportState,
       setPlaybackSource: (source: () => PartyPlaybackSnapshot) => {
         playbackSourceRef.current = source;
       },
