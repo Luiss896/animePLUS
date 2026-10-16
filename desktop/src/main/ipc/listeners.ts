@@ -14,6 +14,8 @@ import * as STREAM_PROVIDER_CHANNELS from "./stream-provider/stream-provider-cha
 import { addStreamProviderListeners } from "./stream-provider/stream-provider-listeners";
 import * as THEME_CHANNELS from "./theme/theme-channels";
 import { addThemeEventListeners } from "./theme/theme-listeners";
+import * as WATCH_PARTY_CHANNELS from "./watch-party/watch-party-channels";
+import { addWatchPartyListeners } from "./watch-party/watch-party-listeners";
 import * as WINDOW_CHANNELS from "./window/window-channels";
 import { addWindowEventListeners } from "./window/window-listeners";
 
@@ -25,6 +27,7 @@ export function registerListeners() {
   addRecentlyWatchedListeners();
   addExternalEventListeners();
   addAppEventListeners();
+  addWatchPartyListeners();
   addWindowEventListeners();
 }
 
@@ -38,6 +41,7 @@ export function unregisterListeners() {
     ...Object.values(RECENTLY_WATCHED_CHANNELS),
     ...Object.values(APP_CHANNELS),
     ...Object.values(THEME_CHANNELS),
+    ...Object.values(WATCH_PARTY_CHANNELS),
   ];
 
   allListeners.forEach((channel: string) => {

@@ -2,6 +2,7 @@ import { AppUpdateCheckResult } from "./app-update-types";
 import type { SearchFilterDefinition, SearchFilterValues } from "./search-filters";
 import type { StreamProviderName } from "./stream-providers";
 import type { AutoAddResult, UpcomingSeasonsResult } from "./upcoming-seasons-types";
+import type { PartyMessage } from "./watch-party/protocol";
 
 interface ThemeContext {
   toggle: () => Promise<boolean>;
@@ -372,6 +373,52 @@ interface RecentlyWatchedContext {
   remove: (id: string) => Promise<void>;
 }
 
+/** Connection state reported by whichever transport is running. */
+type PartyConnectionState =
+  | "idle"
+  | "listening"
+  | "connecting"
+  | "connected"
+  | "closed"
+  | "error";
+
+interface PartyStatusEvent {
+  state: PartyConnectionState;
+  error?: string;
+}
+
+interface PartyHostInfo {
+  port: number;
+  pin: string;
+  addresses: string[];
+}
+
+/**
+ * Watch party bridge.
+ *
+ * `onMessage`/`onStatus` register a single handler rather than returning an
+ * unsubscribe function: the preload owns one `ipcRenderer` listener per channel and
+ * forwards to the most recently registered callback, which avoids depending on
+ * how `contextBridge` proxies functions in both directions.
+ */
+interface WatchPartyContext {
+  startHost: (hostName?: string) => Promise<PartyHostInfo>;
+  join: (
+    address: string,
+    pin: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  send: (message: unknown) => Promise<{ ok: boolean; error?: string }>;
+  stop: () => Promise<void>;
+  listAddresses: () => Promise<
+    Array<{ address: string; iface: string; isPrivate: boolean }>
+  >;
+  getDisplayName: () => Promise<string>;
+  setDisplayName: (name: string) => Promise<string>;
+  onMessage: (cb: (msg: PartyMessage) => void) => void;
+  onStatus: (cb: (status: PartyStatusEvent) => void) => void;
+  clearHandlers: () => void;
+}
+
 interface PrivacyContext {
   getIncognito: () => Promise<boolean>;
   setIncognito: (enabled: boolean) => Promise<boolean>;
@@ -478,6 +525,7 @@ declare global {
     streamProvider: StreamProviderContext;
     anilist: AniListContext;
     recentlyWatched: RecentlyWatchedContext;
+    watchParty: WatchPartyContext;
     windowControls: WindowControlsContext;
     urlOpener: UrlOpenerContext;
   }

@@ -8,10 +8,12 @@ import { updateAppLanguage } from "@/renderer/helpers/i18n/language-helpers";
 import { applyStoredThemeClass, syncThemeWithLocal } from "@/renderer/helpers/theme/theme-helper";
 import { ScrollToTop } from "@/renderer/components/scroll-to-top";
 import { UpdateAvailableDialog } from "@/renderer/components/update-available-dialog";
+import { WatchPartyProvider } from "@/renderer/features/watch-party/party-provider";
 import SidebarLayout from "@/renderer/layouts/sidebar-layout";
 import { FollowingPage } from "@/renderer/pages/following-page";
 import { HistoryPage } from "@/renderer/pages/history-page";
 import { BookmarksPage } from "@/renderer/pages/bookmarks-page";
+import { PartyPage } from "@/renderer/pages/party-page";
 import { PlayerPage } from "@/renderer/pages/player-page";
 import { SearchPage } from "@/renderer/pages/search-page";
 import { SettingsPage } from "@/renderer/pages/settings-page";
@@ -36,19 +38,27 @@ export default function App() {
         full-bleed shell outside the sidebar.
       */}
       <UpdateAvailableDialog />
-      <Routes>
-        <Route element={<SidebarLayout />}>
-          <Route path="/" element={<WelcomePage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/bookmarks" element={<BookmarksPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/following" element={<FollowingPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/show/:id" element={<ShowDetailsPage />} />
-          <Route path="/watch" element={<WatchPage />} />
-          <Route path="/player" element={<PlayerPage />} />
-        </Route>
-      </Routes>
+      {/*
+        Also at the root, and for the same reason as the dialog plus one more: a
+        party session must survive navigating between `/party` and the show being
+        watched, so it cannot live inside a single page.
+      */}
+      <WatchPartyProvider>
+        <Routes>
+          <Route element={<SidebarLayout />}>
+            <Route path="/" element={<WelcomePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/bookmarks" element={<BookmarksPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/following" element={<FollowingPage />} />
+            <Route path="/party" element={<PartyPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/show/:id" element={<ShowDetailsPage />} />
+            <Route path="/watch" element={<WatchPage />} />
+            <Route path="/player" element={<PlayerPage />} />
+          </Route>
+        </Routes>
+      </WatchPartyProvider>
     </HashRouter>
   );
 }

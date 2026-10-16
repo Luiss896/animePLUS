@@ -5,6 +5,7 @@ import { exposePrivacyContext } from "./privacy/privacy-context";
 import { exposeRecentlyWatchedContext } from "./recently-watched/recently-watched-context";
 import { exposeStreamProviderContext } from "./stream-provider/stream-provider-context";
 import { exposeThemeContext } from "./theme/theme-context";
+import { exposeWatchPartyContext } from "./watch-party/watch-party-context";
 import { exposeWindowControls } from "./window/window-context";
 
 export default function exposeContexts() {
@@ -15,5 +16,6 @@ export default function exposeContexts() {
   exposeRecentlyWatchedContext();
   exposeExternalContext();
   exposeAppContext();
+  exposeWatchPartyContext();
   exposeWindowControls();
 }

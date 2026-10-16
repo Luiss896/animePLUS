@@ -12,6 +12,12 @@ interface AppStoreSchema {
   "anilist.autoAddSequels"?: boolean;
   "privacy.incognito"?: boolean;
   /**
+   * Name shown to the other side of a watch party. Persisted so it is not retyped
+   * every session; defaults to a generic label rather than the OS account name,
+   * which would leak the machine user name to the peer.
+   */
+  "party.displayName"?: string;
+  /**
    * Derived from the provider registry rather than a hand-written union: this
    * list had already drifted (it was missing `animeunity`), and a stale member
    * list silently accepts or rejects the wrong names.

@@ -4,6 +4,7 @@ import {
   History,
   Home,
   type LucideIcon,
+  PartyPopper,
   Search,
   Settings,
 } from "lucide-react";
@@ -49,6 +50,11 @@ const navbarItems: NavItem[] = [
     title: "Following",
     href: "/following",
     icon: CalendarClock,
+  },
+  {
+    title: "Watch party",
+    href: "/party",
+    icon: PartyPopper,
   },
   {
     title: "Settings",
