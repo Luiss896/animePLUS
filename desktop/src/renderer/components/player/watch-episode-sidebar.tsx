@@ -1,6 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Captions,
+  Check,
+  ChevronRight,
   LayoutGrid,
   List,
   Loader2,
@@ -38,6 +40,8 @@ export type WatchSidebarEpisode = {
   thumbnail: string | null;
   hasSub: boolean;
   hasDub: boolean;
+  /** Already watched to the end, according to watch history. */
+  watched: boolean;
 };
 
 const cardHoverClass =
@@ -72,7 +76,8 @@ function gridTileSize(containerWidth: number): number {
 export function buildWatchSidebarEpisodes(
   details: RichShowDetails | null,
   episodesByMode: Record<StreamMode, EpisodesState>,
-  fallbackThumbnail?: string | null
+  fallbackThumbnail?: string | null,
+  watchedEpisodes?: Set<number> | null
 ): WatchSidebarEpisode[] {
   const subIndexes = new Set<number>();
   const dubIndexes = new Set<number>();
@@ -101,6 +106,9 @@ export function buildWatchSidebarEpisodes(
       thumbnail: rich?.thumbnail ?? cover,
       hasSub: subIndexes.has(index),
       hasDub: dubIndexes.has(index),
+      // A null watched set means "history unknown", which must not be reported
+      // as "unwatched" — it stays false here, matching the unmarked default.
+      watched: watchedEpisodes?.has(index) ?? false,
     };
   });
 }
@@ -194,6 +202,12 @@ const EpisodeListRow = memo(function EpisodeListRow({
 }) {
   const mode = resolvePlayMode(item, filter, currentMode);
   const title = item.title?.trim() || `Episode ${item.index}`;
+  /*
+   * Only shown for episodes that are *not* the one playing. The playing episode
+   * carries the play indicator, and stacking two markers on the same row reads as
+   * a contradiction rather than as extra information.
+   */
+  const showWatched = item.watched && !isCurrent;
 
   return (
     <div
@@ -202,6 +216,7 @@ const EpisodeListRow = memo(function EpisodeListRow({
         cardHoverClass,
         isCurrent && currentCardClass
       )}
+      {...(item.watched ? { "data-episode-watched": "true" } : {})}
     >
       <button
         type="button"
@@ -232,6 +247,17 @@ const EpisodeListRow = memo(function EpisodeListRow({
               )}
             </span>
           </div>
+        ) : showWatched ? (
+          /*
+           * Dim the still as well as badging it: at sidebar size a small check is
+           * easy to miss, and the desaturation is what makes a run of watched
+           * episodes readable at a glance.
+           */
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+              <Check className="h-3.5 w-3.5" strokeWidth={3} />
+            </span>
+          </div>
         ) : null}
       </button>
       <div className="flex min-w-0 flex-1 flex-col items-start">
@@ -240,8 +266,13 @@ const EpisodeListRow = memo(function EpisodeListRow({
           onClick={() => onSelectEpisode(item.index, mode)}
           className="w-full text-left focus-visible:outline-none"
         >
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             EP {String(item.index).padStart(2, "0")}
+            {showWatched ? (
+              <span className="rounded bg-emerald-500/15 px-1 py-px text-[10px] font-semibold normal-case tracking-normal text-emerald-500">
+                Watched
+              </span>
+            ) : null}
           </p>
           <p className="line-clamp-1 text-sm font-semibold" title={title}>
             {title}
@@ -280,19 +311,30 @@ const EpisodeGridCell = memo(function EpisodeGridCell({
   onSelectEpisode: (episode: number, mode: StreamMode) => void;
 }) {
   const mode = resolvePlayMode(item, filter, currentMode);
+  // The playing cell already carries the selection colour; a check on top of it
+  // would be unreadable.
+  const showWatched = item.watched && !isCurrent;
   return (
     <button
       type="button"
       onClick={() => onSelectEpisode(item.index, mode)}
       aria-current={isCurrent ? "true" : undefined}
-      aria-label={`Episode ${item.index}`}
+      aria-label={
+        showWatched ? `Episode ${item.index}, watched` : `Episode ${item.index}`
+      }
+      {...(item.watched ? { "data-episode-watched": "true" } : {})}
       className={cn(
-        "h-full w-full rounded-lg border-2 border-border text-sm font-medium tabular-nums text-muted-foreground focus-visible:outline-none",
+        "relative h-full w-full rounded-lg border-2 border-border text-sm font-medium tabular-nums text-muted-foreground focus-visible:outline-none",
         cardHoverClass,
         isCurrent && cn(currentCardClass, "bg-primary text-primary-foreground")
       )}
     >
       {item.index}
+      {showWatched ? (
+        <span className="pointer-events-none absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+          <Check className="h-2.5 w-2.5" strokeWidth={3} />
+        </span>
+      ) : null}
     </button>
   );
 });
@@ -304,6 +346,14 @@ interface WatchEpisodeSidebarProps {
   loading: boolean;
   selecting: boolean;
   onSelectEpisode: (episode: number, mode: StreamMode) => void;
+  /**
+   * Opens the series page. Exposed here so the sidebar header — which names the
+   * show, not the episode — can link to it: from the player the series is the one
+   * thing you cannot otherwise reach without going back.
+   */
+  onOpenShow?: () => void;
+  /** Series name shown in the header. */
+  showName?: string | null;
 }
 
 export function WatchEpisodeSidebar({
@@ -313,6 +363,8 @@ export function WatchEpisodeSidebar({
   loading,
   selecting,
   onSelectEpisode,
+  onOpenShow,
+  showName,
 }: WatchEpisodeSidebarProps) {
   const [view, setView] = useState<EpisodeView>("list");
   const [filter, setFilter] = useState<ModeFilter>("all");
@@ -408,6 +460,29 @@ export function WatchEpisodeSidebar({
     <TooltipProvider delayDuration={200}>
       <aside className="flex h-[min(42vh,28rem)] min-h-0 w-full shrink-0 flex-col border-t border-border bg-background lg:h-full lg:w-[22rem] lg:border-l lg:border-t-0">
         <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4">
+          {/*
+            Series link. The sidebar lists episodes, so the show itself had no way
+            back to its own page from the player; this makes the name the way out.
+            A real <button> is safe here (the header is not inside another button).
+          */}
+          {showName ? (
+            onOpenShow ? (
+              <button
+                type="button"
+                onClick={onOpenShow}
+                data-show-page-link="true"
+                title={`Open the series page for ${showName}`}
+                className="group/show -mb-1 flex w-full items-center gap-1 text-left text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none"
+              >
+                <span className="line-clamp-1">{showName}</span>
+                <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-hover/show:translate-x-0.5" />
+              </button>
+            ) : (
+              <p className="line-clamp-1 -mb-1 text-xs font-medium text-muted-foreground">
+                {showName}
+              </p>
+            )
+          ) : null}
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold">Episodes</h2>
             <Badge variant="secondary" className="tabular-nums">

@@ -18,8 +18,10 @@ import { Skeleton } from "@/renderer/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/renderer/components/ui/tabs";
 import { useGoBack } from "@/renderer/hooks/use-go-back";
 import { useShowDetails } from "@/renderer/hooks/use-show-details";
+import { useWatchedEpisodes, showIdCandidates } from "@/renderer/hooks/use-watched-episodes";
 import { stripAniListDescription } from "@/renderer/lib/anilist-helpers";
 import { cn } from "@/renderer/lib/utils";
+import type { StreamProviderName } from "@/shared/stream-providers";
 import type { AniListMediaListStatus, Show } from "@/shared/types";
 
 const SHOW_DETAILS_EPISODE_SKELETON_COUNT = 8;
@@ -92,6 +94,16 @@ function ShowDetailsSkeleton({ onBack }: { onBack: () => void }) {
 
 interface LocationState {
   anime?: Show;
+  /**
+   * Provider that issued the id being opened.
+   *
+   * Provider ids are only meaningful to the host that produced them, and the
+   * configured default may be a different one (a show opened while AnimeUnity was
+   * active, revisited later with HiAnime as the default). Without this the lookup
+   * tries the id on the wrong host and the page fails with a 404/405 instead of
+   * showing the episodes.
+   */
+  provider?: StreamProviderName;
 }
 
 type AnimeMode = "sub" | "dub";
@@ -131,11 +143,24 @@ export function ShowDetailsPage() {
 
   const { details, episodesByMode, loading, error, provider: detailsProvider } = useShowDetails(
     id,
-    anime?.providerId
+    anime?.providerId,
+    state?.provider
   );
 
   const anilistMediaId = details?.anilistMediaId ?? null;
   const hasAniListId = anilistMediaId != null && anilistMediaId > 0;
+
+  /*
+   * Watched episodes for this show. History records the provider-native id while
+   * this route may carry any of three ids (route `id`, the `providerId` query
+   * parameter and the AniList media id), so all of them are offered and the first
+   * that matches wins. `null` means "unknown" (history not read yet, or this show
+   * has never been opened), never "nothing watched".
+   */
+  const { watchedFor } = useWatchedEpisodes();
+  const watchedEpisodes = watchedFor(
+    showIdCandidates(id, anime?.providerId, details?.providerId, anilistMediaId)
+  );
 
   useEffect(() => {
     const nextSubEpisodes =
@@ -470,6 +495,7 @@ export function ShowDetailsPage() {
                       thumbnailUrl={thumbnail}
                       episodeIndex={index}
                       subtitle={title}
+                      watched={watchedEpisodes?.has(index) ?? false}
                       onClick={() => playEpisode(episode)}
                       disabled={isPlaying}
                       layout="grid"

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { DisabledStreamProviderDialog } from "@/renderer/components/disabled-stream-provider-dialog";
 import type { PlayerSubtitleTrack } from "@/renderer/components/player/videojs-react-player";
@@ -10,6 +10,7 @@ import {
 import { WatchVideoPlayerShell } from "@/renderer/components/player/watch-video-player-shell";
 import { Button } from "@/renderer/components/ui/button";
 import { useGoBack } from "@/renderer/hooks/use-go-back";
+import { useWatchedEpisodes, showIdCandidates } from "@/renderer/hooks/use-watched-episodes";
 import {
   DEFAULT_STREAM_PROVIDER,
   STREAM_PROVIDER_LABELS,
@@ -204,6 +205,7 @@ function providerIdBelongsToProvider(providerId: string, provider: string): bool
 export function WatchPage() {
   const location = useLocation();
   const goBack = useGoBack();
+  const navigate = useNavigate();
   const state = location.state as WatchState | null;
   const resumeFromMs = state?.resumeFromMs;
   const historyProviderOverride = state?.providerOverride;
@@ -334,14 +336,31 @@ export function WatchPage() {
   const playbackModeRef = useRef(playbackMode);
   playbackModeRef.current = playbackMode;
 
+  /*
+   * Watched episodes for the show being played. Any of the ids this page knows
+   * may be the one history recorded, so all of them are offered; `null` means the
+   * history has not been read yet and must not be shown as "nothing watched".
+   */
+  const { watchedFor } = useWatchedEpisodes();
+  const watchedEpisodes = watchedFor(
+    showIdCandidates(
+      episode?.id,
+      episode?.providerId,
+      resolvedProviderId,
+      showDetails?.id,
+      showDetails?.anilistMediaId
+    )
+  );
+
   const sidebarEpisodes = useMemo(
     () =>
       buildWatchSidebarEpisodes(
         showDetails,
         episodesByMode,
-        episode?.thumbnail ?? showDetails?.coverImage ?? showDetails?.bannerImage
+        episode?.thumbnail ?? showDetails?.coverImage ?? showDetails?.bannerImage,
+        watchedEpisodes
       ),
-    [showDetails, episodesByMode, episode?.thumbnail]
+    [showDetails, episodesByMode, episode?.thumbnail, watchedEpisodes]
   );
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1132,6 +1151,44 @@ export function WatchPage() {
     [onEpisodeSelect]
   );
 
+  /**
+   * The provider id the series page can actually open, or null when none of the
+   * known ids is usable.
+   *
+   * `showDetails.providerId` is the id the provider itself answered with, so it is
+   * authoritative. Every other source can carry an AniList media id — reaching the
+   * player from an AniList list or the home carousel puts one in `episode.id`, and
+   * `resolvedProviderId` only gets corrected once the cross-host repair has run —
+   * and a bare integer is not a provider id. Navigating with one produced
+   * `hianime.at/watch/134131` → 404, so such ids are rejected rather than sent.
+   */
+  const showPageProviderId = useMemo(() => {
+    const clean = (value?: string | null): string =>
+      typeof value === "string" ? value.trim() : "";
+    const fromDetails = clean(showDetails?.providerId);
+    if (fromDetails) return fromDetails;
+    return (
+      [clean(resolvedProviderIdRef.current), clean(episode?.providerId), clean(episode?.id)].find(
+        (value) => value && !/^\d+$/.test(value)
+      ) ?? null
+    );
+  }, [showDetails?.providerId, episode?.providerId, episode?.id]);
+
+  const openShowPage = useCallback(() => {
+    if (!showPageProviderId) return;
+    const params = new URLSearchParams({ providerId: showPageProviderId });
+    /*
+     * The playing provider is carried across as well, for the same reason as on the
+     * home page: the id is only resolvable by the host that issued it, and the
+     * configured default may differ from the one this episode came from.
+     */
+    const provider =
+      showProviderRef.current ?? historyProviderRef.current ?? undefined;
+    navigate(`/show/${encodeURIComponent(showPageProviderId)}?${params.toString()}`, {
+      state: provider ? { provider } : undefined,
+    });
+  }, [navigate, showPageProviderId]);
+
   const onQualitySelect = useCallback(
     (qualityId: string) => {
       const stream = activeStreamRef.current;
@@ -1468,6 +1525,8 @@ export function WatchPage() {
         loading={showLoading}
         selecting={loadingEpisode}
         onSelectEpisode={onSidebarSelect}
+        showName={displayName}
+        onOpenShow={showPageProviderId ? openShowPage : undefined}
       />
     </div>
   );

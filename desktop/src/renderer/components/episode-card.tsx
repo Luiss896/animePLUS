@@ -1,7 +1,7 @@
 import React, { type MouseEvent, type ReactNode } from "react";
 
 import { cn } from "@/renderer/lib/utils";
-import { Trash2 } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
 
 /** Renders as `M:SS`, or `H:MM:SS` when an hour or longer. */
 function formatDurationMs(ms: number): string {
@@ -32,6 +32,15 @@ export type EpisodeCardProps = {
   episodeIndex?: number;
   /** Line below the badge (e.g. episode title or show name). */
   subtitle?: string | null;
+  /**
+   * When set, the subtitle becomes a link to the series page rather than part of
+   * the card's own action. The card root is a `<button>` (it resumes playback), so
+   * this is a `<span role="link">` with `stopPropagation`, not a nested `<a>` —
+   * anchors inside buttons are invalid HTML and the outer click would win anyway.
+   */
+  onSubtitleClick?: () => void;
+  /** Accessible label for the subtitle link; required for a useful announcement. */
+  subtitleLinkLabel?: string;
   onClick: () => void;
   disabled?: boolean;
   className?: string;
@@ -47,6 +56,8 @@ export type EpisodeCardProps = {
   onRemove?: () => void;
   /** Accessible label for the delete control; defaults to a generic Remove. */
   removeLabel?: string;
+  /** Shows a "Watched" check when the episode has already been seen. */
+  watched?: boolean;
 };
 
 export function EpisodeCard({
@@ -54,6 +65,8 @@ export function EpisodeCard({
   badge,
   episodeIndex,
   subtitle,
+  onSubtitleClick,
+  subtitleLinkLabel,
   onClick,
   disabled,
   className,
@@ -62,6 +75,7 @@ export function EpisodeCard({
   currentDurationMs,
   onRemove,
   removeLabel = "Remove",
+  watched = false,
 }: EpisodeCardProps) {
   const badgeContent = badge ?? (episodeIndex != null ? `Episode ${episodeIndex}` : null);
 
@@ -83,6 +97,7 @@ export function EpisodeCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      {...(watched ? { "data-watched-episode": "true" } : {})}
       {...(layout === "carousel" ? { "data-carousel-item": true } : {})}
       className={cn(
         "group oa-poster-card text-left focus-visible:outline-none disabled:opacity-60",
@@ -146,6 +161,26 @@ export function EpisodeCard({
             </span>
           ) : null}
 
+          {/*
+            Watched marker, top-left. Sits opposite the duration badge and uses a
+            filled check on a solid background so it stays legible over any
+            artwork. `pointer-events-none` keeps it from stealing the card click,
+            and it is aria-hidden because the state is announced on the card's
+            own label instead.
+          */}
+          {watched ? (
+            <div className="pointer-events-none absolute left-2 top-2 z-[1]">
+              <span
+                aria-hidden="true"
+                data-episode-watched="true"
+                className="flex items-center gap-1 rounded-md bg-emerald-500 px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+              >
+                <Check className="h-3 w-3" strokeWidth={3} />
+                Watched
+              </span>
+            </div>
+          ) : null}
+
           {durationLabel != null ? (
             <div className="pointer-events-none absolute right-2 top-2 z-[1]">
               <span className="rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white backdrop-blur-sm">
@@ -161,9 +196,40 @@ export function EpisodeCard({
               </span>
             )}
             {subtitle ? (
-              <p className="line-clamp-2 text-[13px] font-semibold leading-snug drop-shadow-sm">
-                {subtitle}
-              </p>
+              onSubtitleClick ? (
+                /*
+                 * The series name, as a link. `stopPropagation` is what keeps the
+                 * card's own "resume this episode" click from firing, and
+                 * `preventDefault` stops the keydown from also activating the
+                 * parent button when Enter/Space is pressed on this span.
+                 */
+                <span
+                  role="link"
+                  tabIndex={0}
+                  aria-label={subtitleLinkLabel ?? subtitle}
+                  title={subtitleLinkLabel ?? subtitle}
+                  data-episode-subtitle-link="true"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    onSubtitleClick();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.stopPropagation();
+                      event.preventDefault();
+                      onSubtitleClick();
+                    }
+                  }}
+                  className="line-clamp-2 cursor-pointer text-[13px] font-semibold leading-snug underline-offset-2 drop-shadow-sm hover:underline focus-visible:underline focus-visible:outline-none"
+                >
+                  {subtitle}
+                </span>
+              ) : (
+                <p className="line-clamp-2 text-[13px] font-semibold leading-snug drop-shadow-sm">
+                  {subtitle}
+                </p>
+              )
             ) : null}
           </div>
         </div>
