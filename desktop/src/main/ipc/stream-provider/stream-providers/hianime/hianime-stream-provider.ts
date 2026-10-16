@@ -581,6 +581,8 @@ export class HianimeStreamProvider implements StreamProvider {
     let description: string | null = null;
     let anilistId: string | null = this.anilistIdBySlug.get(slug) ?? null;
     let malId: number | null = null;
+    let pageResolved = false;
+    let lastPageError: string | null = null;
 
     const pageAccept = {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -598,14 +600,29 @@ export class HianimeStreamProvider implements StreamProvider {
         description = extractDescriptionFromHtml(html) ?? description;
         anilistId = extractAniListIdFromHtml(html) ?? anilistId;
         malId = extractMalIdFromHtml(html) ?? malId;
+        pageResolved = true;
         break;
       } catch (error: unknown) {
+        lastPageError = error instanceof Error ? error.message : String(error);
         this.log("details:page-failed", {
           providerId: slug,
           url,
-          message: error instanceof Error ? error.message : String(error),
+          message: lastPageError,
         });
       }
+    }
+
+    /*
+     * Neither page existed: the id is stale (renamed or removed record). Returning
+     * a synthetic record here would be indistinguishable from success — it carries
+     * `id: slug`, no AniList id and no thumbnail — and callers that *can* recover
+     * by title only do so when the lookup actually fails. Throwing is therefore
+     * what makes recovery reachable; callers that merely want a thumbnail already
+     * treat a rejection as "no data".
+     */
+    if (!pageResolved) {
+      this.log("details:unresolved", { providerId: slug, message: lastPageError });
+      throw new Error(lastPageError ?? `HiAnime has no record for ${slug}`);
     }
 
     if (!anilistId && malId == null) {

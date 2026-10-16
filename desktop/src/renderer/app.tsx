@@ -7,6 +7,7 @@ import { initI18n } from "@/renderer/helpers/i18n/i18n";
 import { updateAppLanguage } from "@/renderer/helpers/i18n/language-helpers";
 import { applyStoredThemeClass, syncThemeWithLocal } from "@/renderer/helpers/theme/theme-helper";
 import { ScrollToTop } from "@/renderer/components/scroll-to-top";
+import { UpdateAvailableDialog } from "@/renderer/components/update-available-dialog";
 import SidebarLayout from "@/renderer/layouts/sidebar-layout";
 import { FollowingPage } from "@/renderer/pages/following-page";
 import { HistoryPage } from "@/renderer/pages/history-page";
@@ -29,6 +30,12 @@ export default function App() {
   return (
     <HashRouter>
       <ScrollToTop />
+      {/*
+        Mounted at the root rather than inside the layout: the dialog must be able
+        to appear on any route, including the watch page, which renders its own
+        full-bleed shell outside the sidebar.
+      */}
+      <UpdateAvailableDialog />
       <Routes>
         <Route element={<SidebarLayout />}>
           <Route path="/" element={<WelcomePage />} />

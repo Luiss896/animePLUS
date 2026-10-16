@@ -41,3 +41,6 @@ Thumbs.db
 *.nupkg
 *.exe
 !bin/
+
+# 7-Zip staged for Squirrel by forge.config.ts (generated, never committed)
+7z.dll

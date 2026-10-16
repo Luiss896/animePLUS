@@ -6,6 +6,7 @@ import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Card } from "@/renderer/components/ui/card";
 import { PageHeader } from "@/renderer/components/page-header";
+import { resolveProviderForAniListMedia } from "@/renderer/lib/anilist-helpers";
 import { useUpcomingSeasons } from "@/renderer/hooks/use-upcoming-seasons";
 import type {
   AiringShow,
@@ -384,77 +385,19 @@ function openOnAniList(mediaId: number) {
 }
 
 /**
- * Query variants to try, most specific first.
+ * Resolve a provider slug for an AniList media id.
  *
- * Measured against the live providers: a full AniList season title often matches
- * nothing, while the bare series name does. On AnimeUnity (the default host)
- * `"The Apothecary Diaries Season 3"` returned **0** results whereas
- * `"The Apothecary Diaries"` returned 3, and `"DAN DA DAN Season 2"` likewise
- * returned 0. The season suffix is what breaks the match, so it is stripped and
- * retried rather than reported as "no source found".
- */
-function searchQueryVariants(title: string): string[] {
-  const variants: string[] = [title];
-
-  const withoutSeason = title
-    // "Season 3", "Season 2 Part 2", "3rd Season", "Part 2"
-    .replace(/\s*[-–:]?\s*\b(?:season|part|course)\s*\d+\b/gi, "")
-    .replace(/\s*[-–:]?\s*\b\d+(?:st|nd|rd|th)\s+season\b/gi, "")
-    .replace(/\s*[-–:]?\s*\b(?:final\s+season|second\s+season|third\s+season)\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/[\s\-–:]+$/, "")
-    .trim();
-
-  if (withoutSeason && withoutSeason !== title) variants.push(withoutSeason);
-  const base = withoutSeason || title;
-
-  /*
-   * Announced seasons are often listed under a subtitle rather than a season
-   * number, and the subtitle is what breaks the provider match: measured on
-   * AnimeUnity, "Solo Leveling Beyond the System" returned 0 results while
-   * "Solo Leveling" returned 2. Anything before a colon, or a trailing subtitle
-   * clause, is therefore tried as well.
-   */
-  const beforeColon = base.split(/[:–—]/)[0]?.trim() ?? "";
-  if (beforeColon && beforeColon !== base && !variants.includes(beforeColon)) {
-    variants.push(beforeColon);
-  }
-
-  // Last resort: the first few words, which usually still name the series.
-  const firstWords = base.split(/\s+/).slice(0, 3).join(" ");
-  if (firstWords && !variants.includes(firstWords)) variants.push(firstWords);
-
-  return variants;
-}
-
-/**
- * Resolve a provider slug for an AniList media id, retrying with looser queries.
- *
- * Mirrors `resolveProviderForAniListMedia` (exact AniList id match, then first
- * result) but tolerates the season-suffix mismatch described above.
+ * Delegates to the shared resolver so this page and `bookmarks-page.tsx` agree
+ * on what counts as a match. The local season-stripping heuristics that used to
+ * live here are subsumed by `buildShowSearchQueries`, and the previous
+ * "accept the top result" fallback is gone: it opened the wrong show whenever the
+ * catalogue ranked a different season first.
  */
 async function resolveShowSource(
   mediaId: number,
   title: string
 ): Promise<{ providerId: string } | null> {
-  for (const query of searchQueryVariants(title)) {
-    let results: Array<{ id: string; providerId: string }> = [];
-    try {
-      results = await window.streamProvider.search(query);
-    } catch {
-      continue;
-    }
-    if (results.length === 0) continue;
-
-    const exact = results.find((r) => r.id === String(mediaId));
-    if (exact) return { providerId: exact.providerId };
-
-    // Only trust a loose hit from a loosened query; for the verbatim title keep
-    // the bookmarks behaviour of accepting the top result.
-    const first = results[0];
-    if (first) return { providerId: first.providerId };
-  }
-  return null;
+  return resolveProviderForAniListMedia({ id: mediaId, title: { userPreferred: title } });
 }
 
 /**

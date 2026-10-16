@@ -242,7 +242,6 @@ export function scoreShowCandidate(candidate: ShowMatchCandidate, query: ShowMat
 
 /** Weakest title evidence that may still identify a show (containment / subsets). */
 export const MIN_TITLE_SCORE = 250;
-
 /** Minimum score a candidate needs before the app will continue a show on it. */
 export const MIN_SHOW_MATCH_SCORE = MIN_TITLE_SCORE;
 
@@ -314,5 +313,38 @@ export function buildShowSearchQueries(
     if (compact !== base && compact.length >= 4) push(compact);
   }
 
+  return out;
+}
+
+/**
+ * Titles to search a provider with, for an AniList list entry, richest first.
+ *
+ * AniList exposes the same show under several names and catalogues index
+ * different ones, so every spelling is offered to the matcher. `userPreferred`
+ * leads because it is the title the user is actually looking at.
+ */
+export function showTitlesFromAniListMedia(media: {
+  title?: {
+    english?: string | null;
+    romaji?: string | null;
+    native?: string | null;
+    userPreferred?: string | null;
+  } | null;
+}): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (value: string | null | undefined): void => {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(trimmed);
+  };
+
+  add(media.title?.userPreferred);
+  add(media.title?.english);
+  add(media.title?.romaji);
+  add(media.title?.native);
   return out;
 }

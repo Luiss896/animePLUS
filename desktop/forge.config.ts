@@ -4,8 +4,45 @@ import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { copyFileSync, existsSync } from "node:fs";
+import path from "node:path";
 
 const isWindows = process.platform === "win32";
+
+/**
+ * Provide the `7z.exe` that Squirrel.Windows shells out to.
+ *
+ * `make` on Windows failed for several sessions with
+ * `CreateZipFromDirectory … Win32Exception (0x80004005): the system cannot find
+ * the file specified`. It was **not** a missing 7-Zip installation: Squirrel.exe
+ * contains the invocation `a "{0}" -tzip -aoa -y -mmt on *` and hardcodes the
+ * bare command name **`7z.exe`**, which it launches **relative to its current
+ * working directory**. `electron-winstaller` spawns Squirrel with no `cwd`
+ * option, so the child inherits the Forge process directory — this project root —
+ * and looks for `7z.exe` *there*. Nothing ever placed it there, so the process
+ * launch failed and Squirrel reported the failure as a failed extraction.
+ *
+ * The vendored `7z-x64.exe` cannot satisfy the lookup either: the file name
+ * differs. It is therefore copied in under the exact name Squirrel asks for,
+ * together with its DLL.
+ *
+ * Note this is a local-development problem only — CI has a 7-Zip install the
+ * lookup happens to find. The file is generated, never committed.
+ */
+function stageSevenZipForSquirrel(): void {
+  const vendor = path.resolve(__dirname, "node_modules/electron-winstaller/vendor");
+  const source = path.join(vendor, "7z-x64.exe");
+  if (!existsSync(source)) return;
+  // `__dirname` is the directory holding this config, which is also the working
+  // directory Forge runs in and Squirrel therefore inherits.
+  try {
+    copyFileSync(source, path.join(__dirname, "7z.exe"));
+    const dll = path.join(vendor, "7z-x64.dll");
+    if (existsSync(dll)) copyFileSync(dll, path.join(__dirname, "7z.dll"));
+  } catch {
+    // Staging is best effort: if it fails, Squirrel reports its own error.
+  }
+}
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -33,6 +70,22 @@ const config: ForgeConfig = {
    * anything, and Linux is not a target for now.
    */
   makers: [new MakerSquirrel({}), new MakerZIP({}, ["darwin"])],
+  hooks: {
+    /*
+     * Stage 7z.exe before and after the makers run: the release directory may not
+     * exist yet on the first pass, and Squirrel deletes/recreates it during make.
+     * The hooks are declared to return a promise because Forge requires one.
+     */
+    preMake: () => {
+      if (isWindows) stageSevenZipForSquirrel();
+      return Promise.resolve();
+    },
+    postMake: (_forgeConfig, makeResults) => {
+      if (isWindows) stageSevenZipForSquirrel();
+      // Returning the results unchanged keeps Forge's default behaviour.
+      return Promise.resolve(makeResults);
+    },
+  },
   plugins: [
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
