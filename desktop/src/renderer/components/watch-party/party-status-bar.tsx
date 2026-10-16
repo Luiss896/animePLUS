@@ -21,8 +21,7 @@ export function PartyStatusBar({ driftMs }: { driftMs?: number }) {
   if (session.role === null) return null;
 
   const isHost = session.role === "host";
-  const connected =
-    session.status === "connected" && (isHost ? session.guestConnected : true);
+  const connected = session.status === "connected" && (isHost ? session.guestConnected : true);
 
   const driftLabel =
     !isHost && driftMs != null && Number.isFinite(driftMs)
@@ -38,7 +37,7 @@ export function PartyStatusBar({ driftMs }: { driftMs?: number }) {
         <PartyPopper className="h-3.5 w-3.5" />
         Watch party
       </span>
-      <span className="text-muted-foreground">{isHost ? "Host" : "Ospite"}</span>
+      <span className="text-muted-foreground">{isHost ? "Host" : "Guest"}</span>
 
       <span
         className={cn(
@@ -49,13 +48,13 @@ export function PartyStatusBar({ driftMs }: { driftMs?: number }) {
         {connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
         {connected
           ? session.peerName
-            ? `con ${session.peerName}`
-            : "connesso"
+            ? `with ${session.peerName}`
+            : "connected"
           : session.status === "connecting"
-            ? "connessione…"
+            ? "connecting…"
             : isHost
-              ? "in attesa di un ospite"
-              : "in attesa dell'host"}
+              ? "waiting for a guest"
+              : "waiting for the host"}
       </span>
 
       {isHost && session.latencyMs != null ? (
@@ -66,13 +65,13 @@ export function PartyStatusBar({ driftMs }: { driftMs?: number }) {
 
       {driftLabel ? (
         <span className="text-muted-foreground" data-party-bar-drift={Math.round(driftMs ?? 0)}>
-          scarto {driftLabel}
+          drift {driftLabel}
         </span>
       ) : null}
 
       <span className="ml-auto flex items-center gap-2">
         {!isHost ? (
-          <span className="text-muted-foreground">Solo l&apos;host controlla la riproduzione</span>
+          <span className="text-muted-foreground">Only the host controls playback</span>
         ) : null}
         <Button
           variant="ghost"
@@ -81,7 +80,7 @@ export function PartyStatusBar({ driftMs }: { driftMs?: number }) {
           data-party-bar-leave
           onClick={() => void actions.leave()}
         >
-          <LogOut className="mr-1 h-3 w-3" /> Esci
+          <LogOut className="mr-1 h-3 w-3" /> Leave
         </Button>
       </span>
     </div>

@@ -58,7 +58,7 @@ export function addWatchPartyListeners(): void {
         await joinParty(address, pin);
         return { ok: true };
       } catch (error: unknown) {
-        return { ok: false, error: error instanceof Error ? error.message : "Connessione fallita" };
+        return { ok: false, error: error instanceof Error ? error.message : "Connection failed" };
       }
     }
   );

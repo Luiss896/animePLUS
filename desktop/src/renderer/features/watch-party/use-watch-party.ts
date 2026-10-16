@@ -212,7 +212,7 @@ export function useWatchPartySession(options: {
           if (role === "host" && hostPinRef.current && msg.pin && msg.pin !== hostPinRef.current) {
             patch({
               status: "error",
-              error: "Il PIN dell'ospite non corrisponde: codice invito non valido o scaduto",
+              error: "The guest PIN does not match: the invite code is invalid or stale",
             });
             void leaveRef.current();
             return;
@@ -336,7 +336,7 @@ export function useWatchPartySession(options: {
         patch({
           role: null,
           status: "error",
-          error: error instanceof Error ? error.message : "Impossibile creare la stanza",
+          error: error instanceof Error ? error.message : "Could not create the room",
         });
       }
     },
@@ -347,7 +347,7 @@ export function useWatchPartySession(options: {
     async (answerCode: string) => {
       const host = webrtcHostRef.current;
       if (!host) {
-        patch({ status: "error", error: "Nessuna stanza in attesa di risposta" });
+        patch({ status: "error", error: "No room is waiting for an answer" });
         return;
       }
       try {
@@ -356,7 +356,7 @@ export function useWatchPartySession(options: {
       } catch (error: unknown) {
         patch({
           status: "error",
-          error: error instanceof Error ? error.message : "Codice di risposta rifiutato",
+          error: error instanceof Error ? error.message : "Answer code rejected",
         });
       }
     },
@@ -388,7 +388,7 @@ export function useWatchPartySession(options: {
         patch({
           role: null,
           status: "error",
-          error: error instanceof Error ? error.message : "Connessione fallita",
+          error: error instanceof Error ? error.message : "Connection failed",
         });
       }
     },
@@ -435,7 +435,7 @@ export function useWatchPartySession(options: {
         patch({
           role: null,
           status: "error",
-          error: error instanceof Error ? error.message : "Connessione fallita",
+          error: error instanceof Error ? error.message : "Connection failed",
         });
       }
     },

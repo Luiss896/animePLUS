@@ -105,7 +105,7 @@ async function decode(prefix: string, code: string): Promise<unknown> {
    * is exactly the kind of input that contains one — a stray "!" or an ellipsis
    * from a chat client truncating the message. Decoding therefore happens inside a
    * guard: this function's contract is that a bad code yields null, so the caller
-   * can show "codice non valido" instead of an exception nobody catches.
+   * can report "invalid code" instead of an exception nobody catches.
    */
   let bytes: Uint8Array;
   try {

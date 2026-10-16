@@ -155,13 +155,13 @@ function createDataChannelTransport(
     .catch((error: unknown) => {
       handlers.onStatus({
         state: "error",
-        error: error instanceof Error ? error.message : "Canale non disponibile",
+        error: error instanceof Error ? error.message : "Channel unavailable",
       });
     });
 
   pc.addEventListener("connectionstatechange", () => {
     const state = pc.connectionState;
-    if (state === "failed") handlers.onStatus({ state: "error", error: "Connessione P2P fallita" });
+    if (state === "failed") handlers.onStatus({ state: "error", error: "Peer connection failed" });
     else if (state === "disconnected") handlers.onStatus({ state: "closed" });
   });
 
@@ -176,7 +176,7 @@ function createDataChannelTransport(
         } catch (error: unknown) {
           return Promise.resolve({
             ok: false,
-            error: error instanceof Error ? error.message : "Invio fallito",
+            error: error instanceof Error ? error.message : "Send failed",
           });
         }
       }
@@ -186,7 +186,7 @@ function createDataChannelTransport(
         queue.push(payload);
         return Promise.resolve({ ok: true });
       }
-      return Promise.resolve({ ok: false, error: "Canale non aperto" });
+      return Promise.resolve({ ok: false, error: "Channel is not open" });
     },
     close() {
       closed = true;
@@ -245,7 +245,7 @@ export async function createWebRtcHost(
           `Codice di risposta non valido: incolla quello che inizia con ${ANSWER_CODE_PREFIX}`
         );
       }
-      if (pc.signalingState === "closed") throw new Error("Sessione chiusa");
+      if (pc.signalingState === "closed") throw new Error("Session closed");
       await pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
       handlers.onStatus({ state: "connecting" });
     },
@@ -278,7 +278,7 @@ export async function createWebRtcGuest(
 
   const opened = new Promise<RTCDataChannel>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error("L'host non ha risposto in tempo")),
+      () => reject(new Error("The host did not answer in time")),
       HANDSHAKE_TIMEOUT_MS
     );
     pc.addEventListener("datachannel", (event) => {

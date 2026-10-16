@@ -257,7 +257,7 @@ export async function joinParty(address: string, pin: string): Promise<void> {
   await stopParty();
 
   const trimmed = address.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-  if (!trimmed) throw new Error("Indirizzo mancante");
+  if (!trimmed) throw new Error("Address is required");
   const base = `http://${trimmed}`;
 
   const controller = new AbortController();
@@ -283,8 +283,8 @@ export async function joinParty(address: string, pin: string): Promise<void> {
     role = null;
     const message =
       error instanceof Error && error.name === "AbortError"
-        ? "Nessuna risposta: controlla indirizzo, PIN e che siate sulla stessa rete"
-        : "Impossibile raggiungere l'host";
+        ? "No response — check the address and PIN, and that you are both on the same network"
+        : "Could not reach the host";
     emitStatus("error", message);
     throw new Error(message);
   }
@@ -295,18 +295,18 @@ export async function joinParty(address: string, pin: string): Promise<void> {
     role = null;
     const message =
       response.status === 403
-        ? "PIN errato"
+        ? "Wrong PIN"
         : response.status === 409
-          ? "La stanza è già occupata"
-          : `L'host ha rifiutato la connessione (${response.status})`;
+          ? "That room is already taken"
+          : `The host refused the connection (${response.status})`;
     emitStatus("error", message);
     throw new Error(message);
   }
   if (!response.body) {
     guestAbort = null;
     role = null;
-    emitStatus("error", "Risposta senza flusso di eventi");
-    throw new Error("Risposta senza flusso di eventi");
+    emitStatus("error", "The host returned no event stream");
+    throw new Error("The host returned no event stream");
   }
 
   emitStatus("connected");
@@ -344,25 +344,25 @@ export async function joinParty(address: string, pin: string): Promise<void> {
 
 /** Send a message in the outbound direction for the current role. */
 export function sendPartyMessage(message: unknown): { ok: boolean; error?: string } {
-  if (!role) return { ok: false, error: "Nessuna sessione attiva" };
+  if (!role) return { ok: false, error: "No active session" };
 
   // Validate outbound too: a guest must not be able to emit host commands even if
   // the renderer were compromised.
   const expectFrom = role === "host" ? "host" : "guest";
   const parsed = parsePartyMessage(message, expectFrom);
-  if (!parsed) return { ok: false, error: "Messaggio non valido" };
+  if (!parsed) return { ok: false, error: "Invalid message" };
 
   const payload = JSON.stringify(parsed);
 
   if (role === "host") {
-    if (sseClients.size === 0) return { ok: false, error: "Nessun ospite connesso" };
+    if (sseClients.size === 0) return { ok: false, error: "No guest connected" };
     for (const client of sseClients) client.write(`data: ${payload}\n\n`);
     return { ok: true };
   }
 
   // Guest: POST upstream. Fire and forget — a dropped telemetry frame is not worth
   // blocking the playback loop for.
-  if (!guestBase || !guestPin) return { ok: false, error: "Sessione ospite non pronta" };
+  if (!guestBase || !guestPin) return { ok: false, error: "Guest session not ready yet" };
   void fetch(`${guestBase}/send?pin=${encodeURIComponent(guestPin)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

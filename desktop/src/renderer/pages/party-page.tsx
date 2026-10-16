@@ -34,17 +34,17 @@ type Tone = "muted" | "ok" | "warn" | "bad";
 function statusLabel(state: string): { text: string; tone: Tone } {
   switch (state) {
     case "listening":
-      return { text: "In attesa dell'altra persona", tone: "warn" };
+      return { text: "Waiting for the other person", tone: "warn" };
     case "connecting":
-      return { text: "Connessione…", tone: "warn" };
+      return { text: "Connecting…", tone: "warn" };
     case "connected":
-      return { text: "Connesso", tone: "ok" };
+      return { text: "Connected", tone: "ok" };
     case "closed":
-      return { text: "Disconnesso", tone: "bad" };
+      return { text: "Disconnected", tone: "bad" };
     case "error":
-      return { text: "Errore", tone: "bad" };
+      return { text: "Error", tone: "bad" };
     default:
-      return { text: "Non attivo", tone: "muted" };
+      return { text: "Not active", tone: "muted" };
   }
 }
 
@@ -68,9 +68,19 @@ function CopyButton({ label, value }: { label: string; value: string }) {
     }
   }, [value]);
   return (
-    <Button type="button" variant="secondary" size="sm" onClick={() => void copy()} data-party-copy={label}>
-      {copied ? <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-500" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-      {copied ? "Copiato" : "Copia"}
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      onClick={() => void copy()}
+      data-party-copy={label}
+    >
+      {copied ? (
+        <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-500" />
+      ) : (
+        <Copy className="mr-1.5 h-3.5 w-3.5" />
+      )}
+      {copied ? "Copied" : "Copy"}
     </Button>
   );
 }
@@ -102,7 +112,7 @@ export function PartyPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Watch party</h1>
           <p className="text-sm text-muted-foreground">
-            Guarda un episodio in sincronia con un&apos;altra persona che ha animePLUS.
+            Watch an episode in sync with someone else who has animePLUS.
           </p>
         </div>
         <Badge className={cn("ml-auto", TONE_CLASS[status.tone])} data-party-status={session.status}>
@@ -120,36 +130,36 @@ export function PartyPage() {
       ) : null}
 
       <section className="flex flex-col gap-3">
-        <SectionHeading title="Il tuo nome" />
+        <SectionHeading title="Your name" />
         <div className="flex gap-2">
           <Input
             value={nameDraft}
             maxLength={32}
-            placeholder="Come ti vedrà l'altra persona"
+            placeholder="How the other person will see you"
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={() => setDisplayName(nameDraft)}
             className="max-w-xs"
           />
           <Button variant="secondary" onClick={() => setDisplayName(nameDraft)}>
-            Salva
+            Save
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Viene mostrato all&apos;altra persona nella stanza. Non usiamo il nome del tuo account.
+          Shown to the other person in the room. Your account name is never used.
         </p>
       </section>
 
       {!active ? (
         <section className="flex flex-col gap-3">
-          <SectionHeading title="Inizia" />
+          <SectionHeading title="Get started" />
           <div className="grid gap-3 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="h-4 w-4" /> Stessa rete (LAN)
+                  <Users className="h-4 w-4" /> Same network (LAN)
                 </CardTitle>
                 <CardDescription>
-                  Siete sulla stessa rete Wi-Fi o sullo stesso router. Niente passa da internet.
+                  You are on the same Wi-Fi or router. Nothing travels over the internet.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
@@ -158,7 +168,7 @@ export function PartyPage() {
                   disabled={busy}
                   onClick={() => void actions.startHost("lan")}
                 >
-                  Crea stanza
+                  Create room
                 </Button>
                 <Input
                   data-party-input="address"
@@ -168,7 +178,7 @@ export function PartyPage() {
                 />
                 <Input
                   data-party-input="pin"
-                  placeholder="PIN a 6 cifre"
+                  placeholder="6-digit PIN"
                   value={pin}
                   inputMode="numeric"
                   maxLength={6}
@@ -180,7 +190,7 @@ export function PartyPage() {
                   disabled={!address.trim() || pin.length !== 6 || busy}
                   onClick={() => void actions.joinLan(address, pin)}
                 >
-                  Unisciti
+                  Join
                 </Button>
               </CardContent>
             </Card>
@@ -191,8 +201,8 @@ export function PartyPage() {
                   <Globe className="h-4 w-4" /> Internet
                 </CardTitle>
                 <CardDescription>
-                  L&apos;altra persona è altrove. Vi scambiate due codici: nessun server, la
-                  connessione è diretta fra i due computer.
+                  The other person is elsewhere. You exchange two codes — no server, the
+                  connection runs directly between the two computers.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
@@ -201,11 +211,11 @@ export function PartyPage() {
                   disabled={busy}
                   onClick={() => void actions.startHost("webrtc")}
                 >
-                  Crea invito
+                  Create invite
                 </Button>
                 <Textarea
                   data-party-input="invite"
-                  placeholder="Incolla qui il codice invito (APW1:…)"
+                  placeholder="Paste the invite code here (APW1:…)"
                   value={inviteInput}
                   rows={3}
                   className="font-mono text-xs"
@@ -217,14 +227,14 @@ export function PartyPage() {
                   disabled={!inviteInput.trim() || busy}
                   onClick={() => void actions.joinWithCode(inviteInput)}
                 >
-                  Unisciti
+                  Join
                 </Button>
               </CardContent>
             </Card>
           </div>
           <p className="text-xs text-muted-foreground">
-            Con il collegamento diretto, alcune reti aziendali o con NAT molto restrittivo possono
-            impedire la connessione: in quel caso usate la modalità sulla stessa rete.
+            Over a direct connection, some corporate networks or very restrictive NATs can block
+            the link. If that happens, use same-network mode.
           </p>
         </section>
       ) : null}
@@ -232,7 +242,7 @@ export function PartyPage() {
       {/* Host, internet: hand out the invite, take back the answer. */}
       {isHost && overInternet && session.inviteCode ? (
         <section className="flex flex-col gap-3">
-          <SectionHeading title="1 · Manda questo codice" />
+          <SectionHeading title="1 · Send this code" />
           <Card>
             <CardContent className="flex flex-col gap-3 pt-6">
               <Textarea
@@ -246,18 +256,18 @@ export function PartyPage() {
               <div className="flex items-center gap-2">
                 <CopyButton label="invite" value={session.inviteCode} />
                 <span className="text-xs text-muted-foreground">
-                  Mandalo su WhatsApp, Discord o dove preferisci. Vale solo per questa sessione.
+                  Send it over WhatsApp, Discord, anywhere. It is valid for this session only.
                 </span>
               </div>
             </CardContent>
           </Card>
 
-          <SectionHeading title="2 · Incolla la risposta" />
+          <SectionHeading title="2 · Paste their reply" />
           <Card>
             <CardContent className="flex flex-col gap-3 pt-6">
               <Textarea
                 data-party-input="answer"
-                placeholder="Incolla qui il codice di risposta (APW1A:…)"
+                placeholder="Paste the answer code here (APW1A:…)"
                 value={answerInput}
                 rows={3}
                 className="font-mono text-xs"
@@ -268,7 +278,7 @@ export function PartyPage() {
                 disabled={!answerInput.trim() || busy}
                 onClick={() => void actions.acceptAnswerCode(answerInput)}
               >
-                <Link2 className="mr-2 h-4 w-4" /> Collega
+                <Link2 className="mr-2 h-4 w-4" /> Connect
               </Button>
             </CardContent>
           </Card>
@@ -278,7 +288,7 @@ export function PartyPage() {
       {/* Guest, internet: send the answer back. */}
       {!isHost && overInternet && session.answerCode ? (
         <section className="flex flex-col gap-3">
-          <SectionHeading title="Manda questo codice di risposta" />
+          <SectionHeading title="Send this answer code back" />
           <Card>
             <CardContent className="flex flex-col gap-3 pt-6">
               <Textarea
@@ -292,7 +302,7 @@ export function PartyPage() {
               <div className="flex items-center gap-2">
                 <CopyButton label="answer" value={session.answerCode} />
                 <span className="text-xs text-muted-foreground">
-                  Chi ospita lo incolla per completare il collegamento.
+                  The host pastes it to complete the connection.
                 </span>
               </div>
             </CardContent>
@@ -303,12 +313,12 @@ export function PartyPage() {
       {/* Host, LAN: address and PIN. */}
       {isHost && !overInternet && session.hostInfo ? (
         <section className="flex flex-col gap-3">
-          <SectionHeading title="Condividi con l'altra persona" />
+          <SectionHeading title="Share with the other person" />
           <Card>
             <CardContent className="flex flex-col gap-3 pt-6">
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Indirizzo
+                  Address
                 </span>
                 {session.hostInfo.addresses.length > 0 ? (
                   session.hostInfo.addresses.map((value) => (
@@ -324,7 +334,7 @@ export function PartyPage() {
                   ))
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Nessun indirizzo di rete trovato: siete collegati alla stessa rete?
+                    No network address found — are you both on the same network?
                   </p>
                 )}
               </div>
@@ -342,9 +352,7 @@ export function PartyPage() {
                   <CopyButton label="pin" value={session.hostInfo.pin} />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Nessun dato esce dalla rete locale.
-              </p>
+              <p className="text-xs text-muted-foreground">Nothing leaves your local network.</p>
             </CardContent>
           </Card>
         </section>
@@ -352,13 +360,13 @@ export function PartyPage() {
 
       {active ? (
         <section className="flex flex-col gap-3">
-          <SectionHeading title="Partecipanti" />
+          <SectionHeading title="Participants" />
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
               <span className="font-medium">{displayName}</span>
               <span className="text-muted-foreground">
-                ({isHost ? "host" : "ospite"} · {overInternet ? "internet" : "LAN"})
+                ({isHost ? "host" : "guest"} · {overInternet ? "internet" : "LAN"})
               </span>
             </div>
             <div
@@ -374,28 +382,28 @@ export function PartyPage() {
               {session.peerName ? (
                 <>
                   <span className="font-medium">{session.peerName}</span>
-                  <span className="text-muted-foreground">({isHost ? "ospite" : "host"})</span>
+                  <span className="text-muted-foreground">({isHost ? "guest" : "host"})</span>
                   {isHost && session.guestBuffering ? (
-                    <span className="text-amber-500">in buffering</span>
+                    <span className="text-amber-500">buffering</span>
                   ) : null}
                 </>
               ) : (
                 <span className="text-muted-foreground">
                   {isHost
                     ? overInternet
-                      ? "In attesa che incolli la risposta"
-                      : "Nessun ospite connesso"
-                    : "In attesa dell'host"}
+                      ? "Waiting for their reply"
+                      : "No guest connected"
+                    : "Waiting for the host"}
                 </span>
               )}
             </div>
             {isHost && session.latencyMs != null ? (
               <p className="text-xs text-muted-foreground" data-party-latency={session.latencyMs}>
-                Latenza: {session.latencyMs} ms
+                Latency: {session.latencyMs} ms
               </p>
             ) : null}
             {!isHost && session.lastHeartbeatAt ? (
-              <p className="text-xs text-muted-foreground">In contatto con l&apos;host.</p>
+              <p className="text-xs text-muted-foreground">In contact with the host.</p>
             ) : null}
           </div>
 
@@ -405,7 +413,7 @@ export function PartyPage() {
             data-party-action="leave"
             onClick={() => void actions.leave()}
           >
-            <LogOut className="mr-2 h-4 w-4" /> Esci dalla stanza
+            <LogOut className="mr-2 h-4 w-4" /> Leave the room
           </Button>
         </section>
       ) : null}
@@ -413,8 +421,7 @@ export function PartyPage() {
       {active ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Wifi className="h-3.5 w-3.5" />
-          Apri un episodio: chi ospita sceglie cosa guardare e l&apos;altra persona lo segue
-          automaticamente.
+          Open an episode: the host picks what to watch and the other person follows automatically.
         </p>
       ) : null}
     </div>
