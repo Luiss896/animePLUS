@@ -74,7 +74,15 @@ export type PartyHostMessage =
 
 /** Guest -> host. */
 export type PartyGuestMessage =
-  | { t: "ready"; v: number; name: string }
+  /**
+   * The guest attached.
+   *
+   * `pin` is echoed back when the guest arrived through an invite code, so the host
+   * can confirm it invited this peer. It is a check against confusion — a stale or
+   * mismatched code — not a secret boundary: whoever holds the invite already holds
+   * the PIN inside it.
+   */
+  | { t: "ready"; v: number; name: string; pin?: string }
   | { t: "state"; ready: boolean; buffering: boolean; position: number }
   /**
    * Reply to a `heartbeat`. `sentAt` **echoes** the heartbeat's own `sentAt`, not
@@ -227,6 +235,7 @@ export function parsePartyMessage(
         t: "ready",
         v: isFiniteNumber(msg.v) ? msg.v : 0,
         name: typeof msg.name === "string" ? msg.name : "",
+        ...(isNonEmptyString(msg.pin) ? { pin: msg.pin.trim() } : {}),
       };
     case "state": {
       const position = parsePosition(msg.position);

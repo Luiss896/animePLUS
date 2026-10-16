@@ -11,8 +11,10 @@ import { createLanGuest, createLanHost } from "./lan-transport";
 import type {
   PartyHostInfo,
   PartyTransport,
+  PartyTransportKind,
   PartyTransportStatus,
 } from "./transport";
+import { createWebRtcGuest, createWebRtcHost, type WebRtcHostSession } from "./webrtc-transport";
 
 export type PartyRole = "host" | "guest";
 
@@ -35,8 +37,18 @@ export type WatchPartySession = {
   role: PartyRole | null;
   status: PartyConnectionState;
   error: string | null;
-  /** Host only: what to share with the guest. */
+  /** Which transport is carrying this session. */
+  transportKind: PartyTransportKind | null;
+  /** Host only, LAN: what to share with the guest. */
   hostInfo: PartyHostInfo | null;
+  /** Host only, internet: the code to send to the guest. */
+  inviteCode: string | null;
+  /** Guest only, internet: the code to send back to the host. */
+  answerCode: string | null;
+  /** Host only: the PIN an internet guest must echo back. */
+  hostPin: string | null;
+  /** Host only, internet: whether the guest's answer has been applied. */
+  awaitingAnswer: boolean;
   peerName: string | null;
   /** Host only: measured round trip, in ms. */
   latencyMs: number | null;
@@ -62,8 +74,14 @@ export type WatchPartySession = {
 };
 
 export type WatchPartyActions = {
-  startHost: () => Promise<void>;
-  join: (address: string, pin: string) => Promise<void>;
+  /** Host: start listening (LAN) or produce an invite code (internet). */
+  startHost: (kind: PartyTransportKind) => Promise<void>;
+  /** Guest: dial a host on the local network. */
+  joinLan: (address: string, pin: string) => Promise<void>;
+  /** Guest: consume an invite code and produce the answer code to send back. */
+  joinWithCode: (inviteCode: string) => Promise<void>;
+  /** Host: apply the answer code the guest sent back. */
+  acceptAnswerCode: (answerCode: string) => Promise<void>;
   leave: () => Promise<void>;
   /** Host: announce what the party is watching. */
   publishShow: (show: PartyShow) => Promise<void>;
@@ -87,7 +105,12 @@ const IDLE_SESSION: WatchPartySession = {
   role: null,
   status: "idle",
   error: null,
+  transportKind: null,
   hostInfo: null,
+  inviteCode: null,
+  answerCode: null,
+  hostPin: null,
+  awaitingAnswer: false,
   peerName: null,
   latencyMs: null,
   lastHeartbeatAt: null,
@@ -97,6 +120,13 @@ const IDLE_SESSION: WatchPartySession = {
   guestBuffering: false,
   selfReady: false,
 };
+
+/** Six digits, matching what the LAN host shows. */
+function generatePin(): string {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(bytes[0] % 1_000_000).padStart(6, "0");
+}
 
 /**
  * Session state machine for a watch party.
@@ -116,6 +146,17 @@ export function useWatchPartySession(options: {
   const [session, setSession] = useState<WatchPartySession>(IDLE_SESSION);
   const transportRef = useRef<PartyTransport | null>(null);
   const roleRef = useRef<PartyRole | null>(null);
+  /** Internet-mode host: held so the answer code can be applied later. */
+  const webrtcHostRef = useRef<WebRtcHostSession | null>(null);
+  /** PIN an internet guest must echo back. */
+  const hostPinRef = useRef<string | null>(null);
+  /**
+   * `leave`, reachable from the message handler.
+   *
+   * The PIN check above sits in `handleMessage`, which is declared before `leave`;
+   * a ref breaks the cycle without making the handler depend on a later binding.
+   */
+  const leaveRef = useRef<() => Promise<void>>(() => Promise.resolve());
   /** Latest session, readable from effects that must not re-subscribe on change. */
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -161,8 +202,23 @@ export function useWatchPartySession(options: {
           patch({ peerName: msg.hostName || null, show: msg.show ?? null });
           break;
         case "ready":
-          // Host side: the guest attached. Readiness is not assumed — it is
-          // reported separately once the guest's own player can play.
+          /*
+           * Host side: the guest attached.
+           *
+           * An internet guest echoes the invite's PIN here. A mismatch means the
+           * codes came from different sessions — a stale invite, or a reply meant for
+           * someone else — and the join is refused rather than half-established.
+           */
+          if (role === "host" && hostPinRef.current && msg.pin && msg.pin !== hostPinRef.current) {
+            patch({
+              status: "error",
+              error: "Il PIN dell'ospite non corrisponde: codice invito non valido o scaduto",
+            });
+            void leaveRef.current();
+            return;
+          }
+          // Readiness is not assumed — it is reported separately once the guest's
+          // own player can play.
           patch({
             peerName: msg.name || null,
             guestConnected: true,
@@ -228,30 +284,88 @@ export function useWatchPartySession(options: {
     [patch]
   );
 
-  const startHost = useCallback(async () => {
-    setSession({ ...IDLE_SESSION, status: "connecting" });
-    try {
-      const { info, transport } = await createLanHost(
-        { onMessage: handleMessage, onStatus: handleStatus },
-        displayNameRef.current
-      );
-      transportRef.current = transport;
-      roleRef.current = "host";
-      patch({ role: "host", hostInfo: info, status: "listening", error: null });
-    } catch (error: unknown) {
-      roleRef.current = null;
-      transportRef.current = null;
-      patch({
-        role: null,
-        status: "error",
-        error: error instanceof Error ? error.message : "Impossibile creare la stanza",
-      });
-    }
-  }, [handleMessage, handleStatus, patch]);
+  const startHost = useCallback(
+    async (kind: PartyTransportKind) => {
+      setSession({ ...IDLE_SESSION, status: "connecting", transportKind: kind });
+      try {
+        if (kind === "lan") {
+          const { info, transport } = await createLanHost(
+            { onMessage: handleMessage, onStatus: handleStatus },
+            displayNameRef.current
+          );
+          transportRef.current = transport;
+          roleRef.current = "host";
+          patch({
+            role: "host",
+            transportKind: "lan",
+            hostInfo: info,
+            status: "listening",
+            error: null,
+          });
+          return;
+        }
 
-  const join = useCallback(
+        const pin = generatePin();
+        const host = await createWebRtcHost(
+          { onMessage: handleMessage, onStatus: handleStatus },
+          displayNameRef.current,
+          pin
+        );
+        webrtcHostRef.current = host;
+        transportRef.current = host.transport;
+        roleRef.current = "host";
+        hostPinRef.current = pin;
+        /*
+         * No status yet: nothing is listening until the guest's answer arrives, and
+         * reporting "connecting" would look like a failure while the host is simply
+         * waiting for the other person to paste the code.
+         */
+        patch({
+          role: "host",
+          transportKind: "webrtc",
+          inviteCode: host.inviteCode,
+          hostPin: pin,
+          awaitingAnswer: true,
+          status: "listening",
+          error: null,
+        });
+      } catch (error: unknown) {
+        roleRef.current = null;
+        transportRef.current = null;
+        webrtcHostRef.current = null;
+        patch({
+          role: null,
+          status: "error",
+          error: error instanceof Error ? error.message : "Impossibile creare la stanza",
+        });
+      }
+    },
+    [handleMessage, handleStatus, patch]
+  );
+
+  const acceptAnswerCode = useCallback(
+    async (answerCode: string) => {
+      const host = webrtcHostRef.current;
+      if (!host) {
+        patch({ status: "error", error: "Nessuna stanza in attesa di risposta" });
+        return;
+      }
+      try {
+        await host.acceptAnswer(answerCode);
+        patch({ awaitingAnswer: false, status: "connecting", error: null });
+      } catch (error: unknown) {
+        patch({
+          status: "error",
+          error: error instanceof Error ? error.message : "Codice di risposta rifiutato",
+        });
+      }
+    },
+    [patch]
+  );
+
+  const joinLan = useCallback(
     async (address: string, pin: string) => {
-      setSession({ ...IDLE_SESSION, status: "connecting" });
+      setSession({ ...IDLE_SESSION, status: "connecting", transportKind: "lan" });
       try {
         const transport = await createLanGuest(
           { onMessage: handleMessage, onStatus: handleStatus },
@@ -260,7 +374,7 @@ export function useWatchPartySession(options: {
         );
         transportRef.current = transport;
         roleRef.current = "guest";
-        patch({ role: "guest", status: "connected", error: null });
+        patch({ role: "guest", transportKind: "lan", status: "connected", error: null });
         // Announce presence only after the stream is up, otherwise the host would
         // learn a name for a guest that never arrived.
         await transport.send({
@@ -281,10 +395,59 @@ export function useWatchPartySession(options: {
     [handleMessage, handleStatus, patch]
   );
 
+  const joinWithCode = useCallback(
+    async (inviteCode: string) => {
+      setSession({ ...IDLE_SESSION, status: "connecting", transportKind: "webrtc" });
+      try {
+        const guest = await createWebRtcGuest(
+          { onMessage: handleMessage, onStatus: handleStatus },
+          inviteCode
+        );
+        transportRef.current = guest.transport;
+        roleRef.current = "guest";
+        /*
+         * Still `connecting`, not `connected`: the answer code has been produced but
+         * the host has not applied it yet, so no channel exists. The transport's own
+         * status handler flips this once the DataChannel actually opens — reporting
+         * "Connesso" here told the user the party was live while nothing was
+         * connected at all.
+         */
+        patch({
+          role: "guest",
+          transportKind: "webrtc",
+          answerCode: guest.answerCode,
+          status: "connecting",
+          error: null,
+        });
+        /*
+         * Echo the invite's PIN so the host can confirm it invited this peer. Sent
+         * after the transport resolves, which is only once the channel is open.
+         */
+        await guest.transport.send({
+          t: "ready",
+          v: WATCH_PARTY_PROTOCOL_VERSION,
+          name: displayNameRef.current,
+          ...(guest.pin ? { pin: guest.pin } : {}),
+        });
+      } catch (error: unknown) {
+        roleRef.current = null;
+        transportRef.current = null;
+        patch({
+          role: null,
+          status: "error",
+          error: error instanceof Error ? error.message : "Connessione fallita",
+        });
+      }
+    },
+    [handleMessage, handleStatus, patch]
+  );
+
   const leave = useCallback(async () => {
     const transport = transportRef.current;
     roleRef.current = null;
     transportRef.current = null;
+    webrtcHostRef.current = null;
+    hostPinRef.current = null;
     setSession(IDLE_SESSION);
     if (transport) {
       try {
@@ -295,6 +458,7 @@ export function useWatchPartySession(options: {
       await transport.close();
     }
   }, []);
+  leaveRef.current = leave;
 
   /**
    * Host: greet a guest as soon as it attaches.
@@ -359,7 +523,9 @@ export function useWatchPartySession(options: {
   const actions = useMemo<WatchPartyActions>(
     () => ({
       startHost,
-      join,
+      joinLan,
+      joinWithCode,
+      acceptAnswerCode,
       leave,
       publishShow,
       sendPlay: (at: number) => sendCommand({ t: "play", at }),
@@ -370,7 +536,7 @@ export function useWatchPartySession(options: {
         playbackSourceRef.current = source;
       },
     }),
-    [startHost, join, leave, publishShow, sendCommand, reportState]
+    [startHost, joinLan, joinWithCode, acceptAnswerCode, leave, publishShow, sendCommand, reportState]
   );
 
   return { session, actions };
