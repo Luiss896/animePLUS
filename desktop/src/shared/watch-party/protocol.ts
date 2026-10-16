@@ -57,6 +57,18 @@ export type PartyHostMessage =
       playing: boolean;
       buffering: boolean;
       sentAt: number;
+      /**
+       * The host's most recent round-trip measurement, echoed so the guest can
+       * compensate for latency too.
+       *
+       * Only the host can measure it: it sends the heartbeat and receives the
+       * `pong` echo. The guest needs the same number to project a position
+       * forward, and re-using the host's value is sound because the two directions
+       * traverse the same path. Without it a guest would place itself
+       * systematically early by the one-way delay — negligible on a LAN, around
+       * 50-150 ms over the internet, which is visible as lip-sync drift.
+       */
+      rttMs?: number;
     }
   | { t: "bye"; reason: string };
 
@@ -199,12 +211,15 @@ export function parsePartyMessage(
     case "heartbeat": {
       const at = parsePosition(msg.at);
       if (at === null) return null;
+      const rttMs =
+        isFiniteNumber(msg.rttMs) && msg.rttMs >= 0 && msg.rttMs < 60_000 ? msg.rttMs : undefined;
       return {
         t: "heartbeat",
         at,
         playing: msg.playing === true,
         buffering: msg.buffering === true,
         sentAt: isFiniteNumber(msg.sentAt) ? msg.sentAt : Date.now(),
+        ...(rttMs === undefined ? {} : { rttMs }),
       };
     }
     case "ready":

@@ -290,12 +290,15 @@ export function useWatchPartySession(options: {
     if (session.role !== "host" || session.status !== "connected") return;
     const timer = setInterval(() => {
       const snapshot = playbackSourceRef.current();
+      const rtt = sessionRef.current.latencyMs;
       void transportRef.current?.send({
         t: "heartbeat",
         at: snapshot.at,
         playing: snapshot.playing,
         buffering: snapshot.buffering,
         sentAt: Date.now(),
+        // Echoed so the guest can compensate for latency with the same figure.
+        ...(rtt == null ? {} : { rttMs: rtt }),
       });
     }, WATCH_PARTY_HEARTBEAT_MS);
     return () => clearInterval(timer);

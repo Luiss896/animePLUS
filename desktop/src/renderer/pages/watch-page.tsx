@@ -8,7 +8,9 @@ import {
   buildWatchSidebarEpisodes,
 } from "@/renderer/components/player/watch-episode-sidebar";
 import { WatchVideoPlayerShell } from "@/renderer/components/player/watch-video-player-shell";
+import { PartyStatusBar } from "@/renderer/components/watch-party/party-status-bar";
 import { Button } from "@/renderer/components/ui/button";
+import { usePartyPlayerBridge } from "@/renderer/features/watch-party/use-party-player";
 import { useGoBack } from "@/renderer/hooks/use-go-back";
 import { useWatchedEpisodes, showIdCandidates } from "@/renderer/hooks/use-watched-episodes";
 import {
@@ -364,6 +366,14 @@ export function WatchPage() {
   );
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  /*
+   * Watch party wiring. Deliberately placed here, before the early returns below:
+   * hooks must run on every render, and `videoRef` has to exist first. Renders
+   * nothing when no party is active.
+   */
+  const { driftMs: partyDriftMs } = usePartyPlayerBridge({ videoRef });
+
   const lastHistoryEntryRef = useRef<HistoryEntry | null>(null);
   /** Upstream stream URL currently being transcoded (for cancel-on-exit). */
   const activeTranscodeUrlRef = useRef<string | null>(null);
@@ -1473,6 +1483,8 @@ export function WatchPage() {
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col lg:flex-row">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Slim strip above the player; renders nothing when no party is active. */}
+        <PartyStatusBar driftMs={partyDriftMs} />
         <WatchVideoPlayerShell
           playUrl={playUrl}
           streamRevision={streamRevision}
