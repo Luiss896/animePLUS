@@ -414,6 +414,8 @@ interface WatchPartyContext {
   >;
   getDisplayName: () => Promise<string>;
   setDisplayName: (name: string) => Promise<string>;
+  warmInbound: () => Promise<number | null>;
+  stopWarmInbound: () => Promise<void>;
   onMessage: (cb: (msg: PartyMessage) => void) => void;
   onStatus: (cb: (status: PartyStatusEvent) => void) => void;
   clearHandlers: () => void;

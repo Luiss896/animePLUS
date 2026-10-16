@@ -13,6 +13,8 @@ import {
   WATCH_PARTY_START_HOST_CHANNEL,
   WATCH_PARTY_STATUS_EVENT,
   WATCH_PARTY_STOP_CHANNEL,
+  WATCH_PARTY_STOP_WARM_CHANNEL,
+  WATCH_PARTY_WARM_INBOUND_CHANNEL,
 } from "./watch-party-channels";
 
 /**
@@ -67,6 +69,17 @@ export function exposeWatchPartyContext() {
       ipcRenderer.invoke(WATCH_PARTY_GET_DISPLAY_NAME_CHANNEL) as Promise<string>,
     setDisplayName: (name: string) =>
       ipcRenderer.invoke(WATCH_PARTY_SET_DISPLAY_NAME_CHANNEL, name) as Promise<string>,
+
+    /**
+     * Open a listening socket while an internet party is active.
+     *
+     * Peer-to-peer needs inbound UDP, and Windows Firewall only offers the prompt
+     * that allows it for a process that is listening. Returns the port, or null if
+     * the socket could not be opened — never fatal, the party still tries.
+     */
+    warmInbound: () =>
+      ipcRenderer.invoke(WATCH_PARTY_WARM_INBOUND_CHANNEL) as Promise<number | null>,
+    stopWarmInbound: () => ipcRenderer.invoke(WATCH_PARTY_STOP_WARM_CHANNEL) as Promise<void>,
 
     onMessage: (cb: (msg: PartyMessage) => void) => {
       messageHandler = cb;

@@ -11,3 +11,11 @@ export const WATCH_PARTY_MESSAGE_EVENT = "watch-party:message-event";
 
 export const WATCH_PARTY_GET_DISPLAY_NAME_CHANNEL = "watch-party:get-display-name";
 export const WATCH_PARTY_SET_DISPLAY_NAME_CHANNEL = "watch-party:set-display-name";
+
+/**
+ * Open/close a listening socket so Windows offers its inbound-firewall prompt.
+ * Peer-to-peer needs inbound UDP, which is dropped without the rule that prompt
+ * creates.
+ */
+export const WATCH_PARTY_WARM_INBOUND_CHANNEL = "watch-party:warm-inbound";
+export const WATCH_PARTY_STOP_WARM_CHANNEL = "watch-party:stop-warm";

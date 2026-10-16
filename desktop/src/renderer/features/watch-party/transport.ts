@@ -18,6 +18,27 @@ export type PartyTransportStatus = {
 export type PartyTransportHandlers = {
   onMessage: (msg: PartyMessage) => void;
   onStatus: (status: PartyTransportStatus) => void;
+  /**
+   * WebRTC only: what the connection attempt actually did.
+   *
+   * Without this a failed party is an opaque "could not connect", and the two
+   * causes that matter — the two machines cannot reach each other at all, versus
+   * the codes arrived too late — are indistinguishable from the outside.
+   */
+  onDiagnostics?: (info: PartyDiagnostics) => void;
+};
+
+export type PartyDiagnostics = {
+  /** Candidates gathered locally, by kind. `relay` is always 0: no TURN. */
+  hostCandidates: number;
+  srflxCandidates: number;
+  relayCandidates: number;
+  /** `RTCPeerConnection.iceConnectionState` as of the last change. */
+  iceState: string;
+  /** `RTCPeerConnection.connectionState` as of the last change. */
+  connectionState: string;
+  /** Whether a public address was discovered — without one, only same-network works. */
+  publicAddressFound: boolean;
 };
 
 export interface PartyTransport {

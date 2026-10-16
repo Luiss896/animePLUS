@@ -10,6 +10,7 @@ import {
   INVITE_CODE_PREFIX,
 } from "./invite-code";
 import type {
+  PartyDiagnostics,
   PartyTransport,
   PartyTransportHandlers,
 } from "./transport";
@@ -37,8 +38,33 @@ import type {
  * is the right trade for something the user is pasting into a chat window.
  */
 
-/** Public STUN. Free, no account, and not operated by this project. */
-const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+/**
+ * Public STUN servers. Free, no account, and not operated by this project.
+ *
+ * Several rather than one because a single server is a single point of failure, and
+ * because a server-reflexive candidate is the *only* way two peers on different
+ * networks can find each other: with none, the party silently degrades to
+ * same-network-only. Chromium's own defaults list several for the same reason.
+ *
+ * Reading the diagnostics needs care here. A peer reporting `0 public` does not by
+ * itself mean STUN failed: once ICE finds a working pair it stops gathering, so a
+ * same-network connection is established and gathering is truncated before the STUN
+ * reply arrives. That is exactly what two instances on one machine show — the first
+ * peer reports one public candidate and the second none. STUN on this host was
+ * confirmed working separately (6 host + 1 srflx from a standalone gather). In a
+ * *failed* connection, where nothing ever connected and gathering ran to completion,
+ * a missing public candidate is meaningful.
+ */
+const ICE_SERVERS: RTCIceServer[] = [
+  {
+    urls: [
+      "stun:stun.l.google.com:19302",
+      "stun:stun1.l.google.com:19302",
+      "stun:stun2.l.google.com:19302",
+    ],
+  },
+  { urls: "stun:stun.cloudflare.com:3478" },
+];
 
 /** How long to wait for ICE gathering before sending what we have. */
 const ICE_GATHER_TIMEOUT_MS = 6000;
@@ -84,6 +110,56 @@ function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
  * lose it and leave the guest with no host name.
  */
 /**
+ * Report what the connection attempt is actually doing.
+ *
+ * A failed party currently reads as a bare "could not connect", which is the same
+ * message for two very different problems: the two machines cannot reach each other
+ * (no working candidate pair — usually NAT, and unfixable without a relay), or the
+ * codes were exchanged too slowly. Counting candidate kinds separates them: no
+ * `srflx` means no public address was discovered, so only same-network peers can
+ * ever connect.
+ */
+function trackDiagnostics(pc: RTCPeerConnection, handlers: PartyTransportHandlers): void {
+  const counts = { host: 0, srflx: 0, relay: 0 };
+  let publicAddressFound = false;
+
+  const report = (): void => {
+    handlers.onDiagnostics?.({
+      hostCandidates: counts.host,
+      srflxCandidates: counts.srflx,
+      relayCandidates: counts.relay,
+      iceState: pc.iceConnectionState,
+      connectionState: pc.connectionState,
+      publicAddressFound,
+    });
+  };
+
+  pc.addEventListener("icecandidate", (event) => {
+    if (!event.candidate) return;
+    const type = event.candidate.type ?? "host";
+    if (type === "host") counts.host += 1;
+    else if (type === "srflx") {
+      counts.srflx += 1;
+      publicAddressFound = true;
+    } else if (type === "relay") {
+      counts.relay += 1;
+    }
+    report();
+  });
+  pc.addEventListener("iceconnectionstatechange", report);
+  pc.addEventListener("connectionstatechange", report);
+  report();
+}
+
+/** The honest explanation for a peer connection that never came up. */
+function describeFailure(info: PartyDiagnostics | null): string {
+  if (info && !info.publicAddressFound) {
+    return "No public address could be discovered (STUN unreachable), so only two computers on the same network can connect.";
+  }
+  return "The two computers could not reach each other directly. This usually means one of the networks blocks peer-to-peer traffic — corporate networks and some providers do. Same-network mode still works.";
+}
+
+/**
  * A `PartyTransport` whose `send` works only once the channel is open.
  *
  * Takes a *promise* for the channel rather than the channel itself. The guest does
@@ -113,6 +189,14 @@ function createDataChannelTransport(
   const queue: string[] = [];
   let closed = false;
   let channel: RTCDataChannel | null = null;
+  /** Latest diagnostics, so a failure can explain itself instead of guessing. */
+  let lastDiagnostics: PartyDiagnostics | null = null;
+
+  const previousDiagnostics = handlers.onDiagnostics;
+  handlers.onDiagnostics = (info) => {
+    lastDiagnostics = info;
+    previousDiagnostics?.(info);
+  };
 
   const flush = () => {
     if (!channel || channel.readyState !== "open") return;
@@ -161,8 +245,9 @@ function createDataChannelTransport(
 
   pc.addEventListener("connectionstatechange", () => {
     const state = pc.connectionState;
-    if (state === "failed") handlers.onStatus({ state: "error", error: "Peer connection failed" });
-    else if (state === "disconnected") handlers.onStatus({ state: "closed" });
+    if (state === "failed") {
+      handlers.onStatus({ state: "error", error: describeFailure(lastDiagnostics) });
+    } else if (state === "disconnected") handlers.onStatus({ state: "closed" });
   });
 
   return {
@@ -221,6 +306,7 @@ export async function createWebRtcHost(
 ): Promise<WebRtcHostSession> {
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   const channel = pc.createDataChannel("party", { ordered: true });
+  trackDiagnostics(pc, handlers);
   // Host receives from the guest. The channel exists already; hand it over resolved.
   const transport = createDataChannelTransport(pc, Promise.resolve(channel), handlers, "guest");
 
@@ -275,6 +361,7 @@ export async function createWebRtcGuest(
   }
 
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  trackDiagnostics(pc, handlers);
 
   const opened = new Promise<RTCDataChannel>((resolve, reject) => {
     const timer = setTimeout(

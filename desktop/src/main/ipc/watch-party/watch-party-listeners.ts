@@ -3,6 +3,7 @@ import { BrowserWindow, ipcMain } from "electron";
 import type { PartyMessage } from "@/shared/watch-party/protocol";
 
 import { listLanAddresses } from "./lan-address";
+import { startInboundWarmup, stopInboundWarmup } from "./inbound-warmup";
 import {
   joinParty,
   sendPartyMessage,
@@ -23,6 +24,8 @@ import {
   WATCH_PARTY_STATE_CHANNEL,
   WATCH_PARTY_STATUS_EVENT,
   WATCH_PARTY_STOP_CHANNEL,
+  WATCH_PARTY_STOP_WARM_CHANNEL,
+  WATCH_PARTY_WARM_INBOUND_CHANNEL,
 } from "./watch-party-channels";
 import { getPartyDisplayName, setPartyDisplayName } from "./watch-party-store";
 
@@ -67,9 +70,15 @@ export function addWatchPartyListeners(): void {
 
   ipcMain.handle(WATCH_PARTY_STOP_CHANNEL, async () => {
     await stopParty();
+    stopInboundWarmup();
   });
 
   ipcMain.handle(WATCH_PARTY_LIST_ADDRESSES_CHANNEL, () => listLanAddresses());
+
+  ipcMain.handle(WATCH_PARTY_WARM_INBOUND_CHANNEL, () => startInboundWarmup());
+  ipcMain.handle(WATCH_PARTY_STOP_WARM_CHANNEL, () => {
+    stopInboundWarmup();
+  });
 
   ipcMain.handle(WATCH_PARTY_GET_DISPLAY_NAME_CHANNEL, () => getPartyDisplayName());
   ipcMain.handle(WATCH_PARTY_SET_DISPLAY_NAME_CHANNEL, (_event, name: string) =>

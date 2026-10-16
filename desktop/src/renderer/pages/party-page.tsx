@@ -121,12 +121,30 @@ export function PartyPage() {
       </div>
 
       {session.error ? (
-        <p
+        <div
           data-party-error
-          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
-          {session.error}
-        </p>
+          <span>{session.error}</span>
+          {/*
+            Shown because a failed peer connection has two very different causes and
+            the counts tell them apart: no `srflx` means no public address was found,
+            so nothing outside this network can ever connect; plenty of `srflx` with a
+            failure means the networks refuse the direct path.
+          */}
+          {session.diagnostics ? (
+            <span className="font-mono text-xs opacity-80" data-party-diagnostics>
+              candidates: {session.diagnostics.hostCandidates} host,{" "}
+              {session.diagnostics.srflxCandidates} public, {session.diagnostics.relayCandidates}{" "}
+              relay · ICE: {session.diagnostics.iceState} · peer:{" "}
+              {session.diagnostics.connectionState}
+            </span>
+          ) : null}
+          <span className="text-xs opacity-80">
+            Try again and exchange the two codes quickly — the connection attempt gives up after
+            about a minute. If it keeps failing, use same-network mode.
+          </span>
+        </div>
       ) : null}
 
       <section className="flex flex-col gap-3">
@@ -404,6 +422,23 @@ export function PartyPage() {
             ) : null}
             {!isHost && session.lastHeartbeatAt ? (
               <p className="text-xs text-muted-foreground">In contact with the host.</p>
+            ) : null}
+            {/*
+              Always visible over the internet, not only on failure: it is the one
+              piece of information that distinguishes "no public address was found"
+              from "the networks refuse the direct path", and the user can read it
+              out without waiting for something to break.
+            */}
+            {overInternet && session.diagnostics ? (
+              <p
+                className="font-mono text-xs text-muted-foreground"
+                data-party-diagnostics
+              >
+                candidates: {session.diagnostics.hostCandidates} host,{" "}
+                {session.diagnostics.srflxCandidates} public, {session.diagnostics.relayCandidates}{" "}
+                relay · ICE: {session.diagnostics.iceState} · peer:{" "}
+                {session.diagnostics.connectionState}
+              </p>
             ) : null}
           </div>
 

@@ -9,6 +9,7 @@ import {
 
 import { createLanGuest, createLanHost } from "./lan-transport";
 import type {
+  PartyDiagnostics,
   PartyHostInfo,
   PartyTransport,
   PartyTransportKind,
@@ -71,6 +72,8 @@ export type WatchPartySession = {
   guestBuffering: boolean;
   /** Guest only: whether its own player is ready to be driven. */
   selfReady: boolean;
+  /** Internet only: what the connection attempt actually did. */
+  diagnostics: PartyDiagnostics | null;
 };
 
 export type WatchPartyActions = {
@@ -119,6 +122,7 @@ const IDLE_SESSION: WatchPartySession = {
   guestReady: false,
   guestBuffering: false,
   selfReady: false,
+  diagnostics: null,
 };
 
 /** Six digits, matching what the LAN host shows. */
@@ -284,6 +288,28 @@ export function useWatchPartySession(options: {
     [patch]
   );
 
+  const handleDiagnostics = useCallback(
+    (info: PartyDiagnostics) => {
+      patch({ diagnostics: info });
+    },
+    [patch]
+  );
+
+  /**
+   * Ask Windows for the inbound rule a peer-to-peer connection needs.
+   *
+   * Without it the remote peer's packets are dropped silently and ICE fails, which
+   * looks exactly like a hostile NAT. The rule the prompt creates is
+   * application-scoped and covers every port, so this is a one-time cost.
+   */
+  const warmInbound = useCallback(async () => {
+    try {
+      await window.watchParty.warmInbound();
+    } catch {
+      /* best effort: the party still tries without it */
+    }
+  }, []);
+
   const startHost = useCallback(
     async (kind: PartyTransportKind) => {
       setSession({ ...IDLE_SESSION, status: "connecting", transportKind: kind });
@@ -306,8 +332,11 @@ export function useWatchPartySession(options: {
         }
 
         const pin = generatePin();
+        // Before the offer is created: the prompt must be accepted for the peer's
+        // packets to reach us at all.
+        await warmInbound();
         const host = await createWebRtcHost(
-          { onMessage: handleMessage, onStatus: handleStatus },
+          { onMessage: handleMessage, onStatus: handleStatus, onDiagnostics: handleDiagnostics },
           displayNameRef.current,
           pin
         );
@@ -399,8 +428,9 @@ export function useWatchPartySession(options: {
     async (inviteCode: string) => {
       setSession({ ...IDLE_SESSION, status: "connecting", transportKind: "webrtc" });
       try {
+        await warmInbound();
         const guest = await createWebRtcGuest(
-          { onMessage: handleMessage, onStatus: handleStatus },
+          { onMessage: handleMessage, onStatus: handleStatus, onDiagnostics: handleDiagnostics },
           inviteCode
         );
         transportRef.current = guest.transport;
