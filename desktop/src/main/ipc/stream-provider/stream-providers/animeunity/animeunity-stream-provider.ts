@@ -7,10 +7,15 @@ import {
   sortHlsVariantsDescending,
 } from "@/shared/utils/hls-master";
 
-import { StreamMode, StreamProvider, StreamQualityOption, StreamUrlResult } from "../stream-provider";
+import {
+  StreamMode,
+  StreamProvider,
+  StreamQualityOption,
+  StreamUrlResult,
+} from "../stream-provider";
 
 /**
- * AnimeUnity — Italian-subtitled fallback host.
+ * AnimeUnity, Italian-subtitled fallback host.
  *
  * Why this provider exists: the other sources are not guaranteed to carry
  * Italian subtitles. AnimeUnity publishes two separate entries per show, and the
@@ -23,22 +28,45 @@ import { StreamMode, StreamProvider, StreamQualityOption, StreamUrlResult } from
  * The subtitles are burned into the video, so there is no subtitle track to
  * expose and the player's subtitle selector stays empty for this host.
  *
- * Resolution chain (all verified against the live site):
+ * Resolution chain:
  *   /archivio?title=X            -> HTML with records="[...]" (JSON, HTML-escaped)
  *   /anime/{id}-{slug}           -> HTML with episodes="[...]"
  *   /embed-url/{episodeId}       -> plain text: the VixCloud embed URL
- *   vixcloud.co/embed/...        -> HTML exposing window.masterPlaylist
- *   vixcloud.co/playlist/{id}?token=..&expires=..&h=1 -> HLS master
+ *   {player}/embed/...           -> HTML exposing window.masterPlaylist
+ *   {player}/playlist/{id}?token=..&expires=..&h=1 -> HLS master
  *
  * The `h=1` parameter is essential: the embed page advertises an `asn` parameter
  * which the API rejects with 403. `h=1` is what the site's own player uses.
+ *
+ * ## Both hosts move, and they moved at once
+ *
+ * Verified on 2026-10-17 against public DNS and the live site:
+ *
+ *   - `www.animeunity.so` no longer resolves at all (NXDOMAIN). The site answers
+ *     from `www.animeunity.co`, and the `.it` / `.to` domains redirect there.
+ *   - The embed URL the site hands out now points at `vixcloud.cc`, not
+ *     `vixcloud.co`, which no longer resolves either.
+ *
+ * Pinning either name broke every path of this provider at once. Search, episode
+ * lists and the "recently uploaded" row all threw `fetch failed`, and the UI could
+ * only show that as an empty page: no results in the player's Host menu, nothing
+ * in Recently uploaded, and error cards over Continue watching. The site host is
+ * therefore resolved at runtime from a candidate list, and the player host is read
+ * from the embed URL instead of being assumed.
  */
-const API = process.env.ANIMEUNITY_BASE || "https://www.animeunity.so";
-const SITE_REFERER = `${API.replace(/\/$/, "")}/`;
-/** VixCloud rejects requests without a matching Referer/Origin. */
-const VIX_REFERER = "https://vixcloud.co/";
+const CANDIDATE_SITE_BASES = [
+  "https://www.animeunity.co",
+  "https://www.animeunity.it",
+  "https://www.animeunity.to",
+] as const;
 const SEARCH_LIMIT_PAGES = 1;
 const IS_DEV = process.env.NODE_ENV !== "production";
+
+/** A resolved host is reused for this long before being probed again. */
+const SITE_BASE_TTL_MS = 30 * 60_000;
+/** Probing a dead candidate must not delay the first useful request for long. */
+const PROBE_TIMEOUT_MS = 8_000;
+const REQUEST_TIMEOUT_MS = 20_000;
 
 interface AnimeUnityRecord {
   id?: number;
@@ -84,10 +112,173 @@ interface AnimeUnityAnime {
   anilist_id?: number | null;
 }
 
+/** One card of the home page "ULTIME AGGIUNTE" list. */
+interface LatestUpload {
+  providerId: string;
+  title: string;
+  thumbnail: string | null;
+  episodes: number | null;
+}
+
 function log(event: string, meta?: Record<string, unknown>): void {
   if (!IS_DEV) return;
   const suffix = meta ? ` ${JSON.stringify(meta)}` : "";
   console.info(`[animeunity-provider] ${event}${suffix}`);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Host resolution                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** Cached site host plus the moment it was resolved. */
+let siteBaseCache: { base: string; at: number } | null = null;
+/** In-flight probe, so concurrent requests share one resolution. */
+let siteBaseProbe: Promise<string> | null = null;
+
+function siteReferer(base: string): string {
+  return `${base}/`;
+}
+
+/** Explicit override for tests and for pinning a host without a rebuild. */
+function overrideSiteBase(): string | null {
+  const override = process.env.ANIMEUNITY_BASE?.trim();
+  return override ? override.replace(/\/+$/, "") : null;
+}
+
+async function fetchText(
+  url: string,
+  referer: string,
+  timeoutMs = REQUEST_TIMEOUT_MS
+): Promise<string> {
+  const response = await fetch(url, {
+    redirect: "follow",
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+      "User-Agent": getElectronUserAgent(),
+      Referer: referer,
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    throw new Error(`AnimeUnity request failed (${response.status}): ${url}`);
+  }
+  return response.text();
+}
+
+/**
+ * A host is the site when it answers the archive page with an escaped `records`
+ * payload. That single check proves DNS, reachability and the page contract,
+ * which is what any later request depends on.
+ */
+async function hostServesAnimeUnity(base: string): Promise<boolean> {
+  try {
+    const html = await fetchText(
+      `${base}/archivio?title=&page=1`,
+      siteReferer(base),
+      PROBE_TIMEOUT_MS
+    );
+    return html.includes("records=");
+  } catch {
+    return false;
+  }
+}
+
+async function resolveSiteBase(): Promise<string> {
+  const override = overrideSiteBase();
+  if (override) return override;
+
+  if (siteBaseCache && Date.now() - siteBaseCache.at < SITE_BASE_TTL_MS) {
+    return siteBaseCache.base;
+  }
+
+  if (siteBaseProbe === null) {
+    siteBaseProbe = (async () => {
+      for (const base of CANDIDATE_SITE_BASES) {
+        if (await hostServesAnimeUnity(base)) return base;
+      }
+      throw new Error(
+        `AnimeUnity is unreachable: none of ${CANDIDATE_SITE_BASES.join(", ")} answered. ` +
+          "Set ANIMEUNITY_BASE to pin a host."
+      );
+    })().finally(() => {
+      siteBaseProbe = null;
+    });
+  }
+
+  const base = await siteBaseProbe;
+  siteBaseCache = { base, at: Date.now() };
+  return base;
+}
+
+function forgetSiteBase(): void {
+  siteBaseCache = null;
+}
+
+/**
+ * `fetch()` rejects with a `TypeError` when the host cannot be reached at all
+ * (DNS failure, connection reset). An HTTP error is reported by `fetchText` as a
+ * plain `Error` and must not be retried elsewhere: the host answered, so another
+ * candidate would only produce the same status and a slower failure.
+ */
+function isUnreachableHostError(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
+/**
+ * Run one request against the resolved site host, re-resolving once if that host
+ * has become unreachable since it was cached.
+ */
+async function withSiteHost<T>(run: (base: string) => Promise<T>): Promise<T> {
+  const base = await resolveSiteBase();
+  try {
+    return await run(base);
+  } catch (error) {
+    if (!isUnreachableHostError(error)) throw error;
+    forgetSiteBase();
+    const next = await resolveSiteBase();
+    if (next === base) throw error;
+    return run(next);
+  }
+}
+
+/**
+ * Origin of the player host that serves the embed, or null when the embed URL is
+ * not VixCloud-shaped.
+ *
+ * Read from the URL rather than pinned: VixCloud moved from `.co` to `.cc` and a
+ * pinned value made every AnimeUnity stream fail with "unexpected embed URL".
+ */
+function playerOriginFromEmbed(embedUrl: string): string | null {
+  try {
+    const url = new URL(embedUrl);
+    if (!/^vixcloud\.[a-z.]+$/i.test(url.hostname)) return null;
+    if (!url.pathname.startsWith("/embed/")) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Spell a title the way the archive search actually accepts it.
+ *
+ * The search is literal about typography: it answers with zero records for
+ * "Frieren: Beyond Journey’s End" (typographic apostrophe) and with the full list
+ * for "Frieren: Beyond Journey's End" (ASCII apostrophe). Measured in the app log
+ * while switching host mid-episode, where the renderer had to spend three of its
+ * title spellings before one matched.
+ *
+ * Since the in-player host switch has a fixed budget of title variants, handing it
+ * a query the server cannot match made a working switch look broken.
+ */
+function toSearchableQuery(query: string): string {
+  return query
+    .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .trim();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -141,13 +332,52 @@ function parseAnimePage(html: string): {
   return { anime, episodes };
 }
 
+function stripTags(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Parse the home page "ULTIME AGGIUNTE" (latest added) list.
+ *
+ * Every card is a `div.latest-anime-container`, server-rendered, carrying the
+ * show link (`/anime/{id}-{slug}`), the poster, the title in a `<strong>` and a
+ * line such as `24 min - 23 Episodi`. Splitting on the class name is enough to
+ * isolate one card per chunk and avoids depending on the surrounding wrappers,
+ * which differ between the home page and the archive page.
+ */
+function parseLatestUploads(html: string): LatestUpload[] {
+  const chunks = html.split("latest-anime-container").slice(1);
+  const uploads: LatestUpload[] = [];
+
+  for (const chunk of chunks) {
+    const providerId = /href="(?:https?:\/\/[^"]+?)?\/anime\/([^"?#]+)/.exec(chunk)?.[1];
+    const rawTitle =
+      /<strong[^>]*class="[^"]*latest-anime-title[^"]*"[^>]*>([\s\S]*?)<\/strong>/.exec(chunk)?.[1];
+    if (!providerId || !rawTitle) continue;
+
+    const title = stripTags(decodeHtmlEntities(rawTitle));
+    if (!title) continue;
+
+    const thumbnail = /<img[^>]*\ssrc="([^"]+)"/.exec(chunk)?.[1] ?? null;
+    const episodeCount = /(\d+)\s*Episod/i.exec(chunk)?.[1];
+
+    uploads.push({
+      providerId: decodeHtmlEntities(providerId).trim(),
+      title,
+      thumbnail: thumbnail ? decodeHtmlEntities(thumbnail).trim() : null,
+      episodes: episodeCount ? Number.parseInt(episodeCount, 10) : null,
+    });
+  }
+
+  return uploads;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Mapping                                                                    */
 /* -------------------------------------------------------------------------- */
-
-function containsIgnoreCase(haystack: string, needle: string): boolean {
-  return haystack.toLowerCase().includes(needle.toLowerCase());
-}
 
 function mapStatus(raw: string | null | undefined): string | undefined {
   if (!raw) return undefined;
@@ -187,12 +417,12 @@ function parseScore(raw: string | null | undefined): number | undefined {
   return Math.min(Math.round(value * 10), 100);
 }
 
-function absolutePosterUrl(ref: string | null | undefined): string | null {
+function absolutePosterUrl(ref: string | null | undefined, base: string): string | null {
   const value = ref?.trim();
   if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
   const sep = value.startsWith("/") ? "" : "/";
-  return `${API}${sep}${value}`;
+  return `${base}${sep}${value}`;
 }
 
 /** The URL path segment used by the site: `{id}-{slug}`. */
@@ -216,7 +446,13 @@ function isSubItaRecord(record: AnimeUnityRecord): boolean {
   return !slug.endsWith("-ita");
 }
 
-function mapRecordToSearchResult(record: AnimeUnityRecord): ShowSearchResult | null {
+/** Home page cards carry no `dub` flag, so the slug and the title decide. */
+function isSubItaUpload(upload: LatestUpload): boolean {
+  if (/-ita$/i.test(upload.providerId)) return false;
+  return !/\(ita\)\s*$/i.test(upload.title);
+}
+
+function mapRecordToSearchResult(record: AnimeUnityRecord, base: string): ShowSearchResult | null {
   const providerId = toProviderId(record);
   if (!providerId) return null;
 
@@ -233,7 +469,7 @@ function mapRecordToSearchResult(record: AnimeUnityRecord): ShowSearchResult | n
       english: titleIt ?? english,
       romanji,
     },
-    thumbnail: absolutePosterUrl(record.imageurl),
+    thumbnail: absolutePosterUrl(record.imageurl, base),
     availableEpisodes: {
       sub: totalEps && totalEps > 0 ? totalEps : undefined,
       // This provider only exposes the Italian-subtitled releases.
@@ -251,36 +487,34 @@ function mapRecordToSearchResult(record: AnimeUnityRecord): ShowSearchResult | n
 /* -------------------------------------------------------------------------- */
 
 export class AnimeUnityStreamProvider implements StreamProvider {
-  private async fetchText(url: string, referer: string): Promise<string> {
-    const response = await fetch(url, {
-      headers: {
-        Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        "User-Agent": getElectronUserAgent(),
-        Referer: referer,
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`AnimeUnity request failed (${response.status}): ${url}`);
-    }
-    return response.text();
-  }
-
-  private async fetchArchive(title: string, page: number): Promise<AnimeUnityRecord[]> {
+  private async fetchArchive(
+    title: string,
+    page: number
+  ): Promise<{ records: AnimeUnityRecord[]; base: string }> {
     const startedAt = Date.now();
-    const query = new URLSearchParams({ title, page: String(page) });
-    const html = await this.fetchText(`${API}/archivio?${query.toString()}`, SITE_REFERER);
-    const records = parseArchiveRecords(html);
-    log("archive:done", { title, page, records: records.length, ms: Date.now() - startedAt });
-    return records;
+    const result = await withSiteHost(async (base) => {
+      const query = new URLSearchParams({ title, page: String(page) });
+      const html = await fetchText(`${base}/archivio?${query.toString()}`, siteReferer(base));
+      return { records: parseArchiveRecords(html), base };
+    });
+    log("archive:done", {
+      title,
+      page,
+      records: result.records.length,
+      ms: Date.now() - startedAt,
+    });
+    return result;
   }
 
   private async fetchAnimePage(providerId: string): Promise<{
     anime: AnimeUnityAnime | null;
     episodes: AnimeUnityEpisode[];
+    base: string;
   }> {
-    const html = await this.fetchText(`${API}/anime/${providerId}`, SITE_REFERER);
-    return parseAnimePage(html);
+    return withSiteHost(async (base) => {
+      const html = await fetchText(`${base}/anime/${providerId}`, siteReferer(base));
+      return { ...parseAnimePage(html), base };
+    });
   }
 
   /**
@@ -290,24 +524,36 @@ export class AnimeUnityStreamProvider implements StreamProvider {
    * `h=1` parameter is the one that actually works: the embed page publishes an
    * `asn` parameter instead, and requesting with it returns 403.
    */
-  private async resolveMasterUrl(episodeId: number): Promise<{ masterUrl: string }> {
+  private async resolveMasterUrl(episodeId: number): Promise<{
+    masterUrl: string;
+    playerReferer: string;
+  }> {
     const startedAt = Date.now();
-    const embedUrl = (
-      await this.fetchText(`${API}/embed-url/${String(episodeId)}`, SITE_REFERER)
-    ).trim();
+    const lookup = await withSiteHost(async (base) => ({
+      embedUrl: (
+        await fetchText(`${base}/embed-url/${String(episodeId)}`, siteReferer(base))
+      ).trim(),
+      siteUrl: base,
+    }));
 
-    if (!/^https?:\/\/vixcloud\.co\/embed\//i.test(embedUrl)) {
-      throw new Error(`AnimeUnity returned an unexpected embed URL: ${embedUrl.slice(0, 120)}`);
+    const playerOrigin = playerOriginFromEmbed(lookup.embedUrl);
+    if (!playerOrigin) {
+      throw new Error(
+        `AnimeUnity returned an unexpected embed URL: ${lookup.embedUrl.slice(0, 120)}`
+      );
     }
+    const playerReferer = `${playerOrigin}/`;
 
-    const embedHtml = await this.fetchText(embedUrl, SITE_REFERER);
+    // The embed page is still requested with the site as its referer, which is
+    // what the site's own iframe produces.
+    const embedHtml = await fetchText(lookup.embedUrl, siteReferer(lookup.siteUrl));
     const decoded = decodeHtmlEntities(embedHtml);
 
     // The embed page declares its stream as an inline JS object:
     //
     //   window.masterPlaylist = {
     //     params: { 'token': '...', 'expires': '...', 'asn': '', },
-    //     url: 'https://vixcloud.co/playlist/326682',
+    //     url: 'https://vixcloud.cc/playlist/326682',
     //   }
     //   window.canPlayFHD = true
     //
@@ -334,13 +580,13 @@ export class AnimeUnityStreamProvider implements StreamProvider {
     }
 
     // The `url` is not always bare: VixCloud serves some episodes from
-    // `https://vixcloud.co/playlist/{id}?b=1`, and that flag is load-bearing —
+    // `https://vixcloud.cc/playlist/{id}?b=1`, and that flag is load-bearing:
     // requesting the same playlist without it returns 403. Appending with a
     // second `?` (`...?b=1?token=…`) makes the server read the whole thing as the
     // value of `b`, which is also a 403, so merge the query properly instead of
     // concatenating. Verified against the live CDN for episode 110629
-    // (The Ramparts of Ice S2 ep 3): `?b=1&token=…` → 200 with a 1080p ladder,
-    // `?b=1?token=…` and `?token=…` (dropping `b`) → 403.
+    // (The Ramparts of Ice S2 ep 3): `?b=1&token=…` -> 200 with a 1080p ladder,
+    // `?b=1?token=…` and `?token=…` (dropping `b`) -> 403.
     const masterUrl = (() => {
       try {
         const url = new URL(baseUrl);
@@ -352,8 +598,8 @@ export class AnimeUnityStreamProvider implements StreamProvider {
         return `${baseUrl}?token=${token}&expires=${expires}&h=1`;
       }
     })();
-    log("master:resolved", { episodeId, ms: Date.now() - startedAt });
-    return { masterUrl };
+    log("master:resolved", { episodeId, player: playerOrigin, ms: Date.now() - startedAt });
+    return { masterUrl, playerReferer };
   }
 
   getSearchFilters(): SearchFilterDefinition[] {
@@ -366,27 +612,81 @@ export class AnimeUnityStreamProvider implements StreamProvider {
       return this.getRecentUploads(1, 24, "sub");
     }
 
-    const results: ShowSearchResult[] = [];
-    for (let page = 1; page <= SEARCH_LIMIT_PAGES; page += 1) {
-      const records = await this.fetchArchive(trimmed, page);
-      if (records.length === 0) break;
-      for (const record of records) {
-        // Only the Italian-subtitled release of each show is offered.
-        if (!isSubItaRecord(record)) continue;
-        const mapped = mapRecordToSearchResult(record);
-        if (mapped) results.push(mapped);
+    // ASCII spelling first, the literal one only as a fallback: see
+    // `toSearchableQuery` for the measured reason.
+    const spellings = [...new Set([toSearchableQuery(trimmed), trimmed])].filter(
+      (spelling) => spelling.length > 0
+    );
+
+    for (const spelling of spellings) {
+      const results: ShowSearchResult[] = [];
+      for (let page = 1; page <= SEARCH_LIMIT_PAGES; page += 1) {
+        const { records, base } = await this.fetchArchive(spelling, page);
+        if (records.length === 0) break;
+        for (const record of records) {
+          // Only the Italian-subtitled release of each show is offered.
+          if (!isSubItaRecord(record)) continue;
+          const mapped = mapRecordToSearchResult(record, base);
+          if (mapped) results.push(mapped);
+        }
       }
+      if (results.length > 0) return results;
     }
-    return results;
+
+    return [];
   }
 
+  /**
+   * "Recently uploaded" for this host.
+   *
+   * The archive endpoint is not sorted by recency: with an empty query it returns
+   * the default catalogue order, whose first page starts with shows from 2023, so
+   * it cannot stand in for a "recent" row. The site's own recency list is the
+   * "ULTIME AGGIUNTE" block on the home page, which is what is parsed here.
+   *
+   * The archive is still used as a fallback, and only when the home page yields
+   * no usable card, so a cosmetic layout change cannot empty the row.
+   */
   async getRecentUploads(page: number, limit = 24, mode: StreamMode = "sub"): Promise<Episode[]> {
     if (page > 1) return [];
-    const records = await this.fetchArchive("", page);
-    const usable = records.filter((r) => isSubItaRecord(r) && toProviderId(r) != null);
+    const wanted = Math.max(1, limit);
 
-    return usable.slice(0, Math.max(1, limit)).map((record) => {
-      const providerId = toProviderId(record)!;
+    const latest = await withSiteHost(async (base) => {
+      const html = await fetchText(siteReferer(base), siteReferer(base));
+      return parseLatestUploads(html).map((upload) => ({
+        ...upload,
+        thumbnail: absolutePosterUrl(upload.thumbnail, base),
+      }));
+    });
+
+    const subIta = latest.filter(isSubItaUpload);
+    if (subIta.length > 0) {
+      log("recent:home", { cards: latest.length, subIta: subIta.length });
+      return subIta.slice(0, wanted).map((upload) => ({
+        id: upload.providerId,
+        providerId: upload.providerId,
+        title: { english: upload.title, romanji: upload.title },
+        thumbnail: upload.thumbnail,
+        index: upload.episodes && upload.episodes > 0 ? upload.episodes : 1,
+        mode,
+      }));
+    }
+
+    return this.recentUploadsFromArchive(wanted, mode);
+  }
+
+  private async recentUploadsFromArchive(wanted: number, mode: StreamMode): Promise<Episode[]> {
+    const { records, base } = await this.fetchArchive("", 1);
+    const usable = records
+      .filter(isSubItaRecord)
+      .map((record) => ({ record, providerId: toProviderId(record) }))
+      .filter(
+        (entry): entry is { record: AnimeUnityRecord; providerId: string } =>
+          entry.providerId != null
+      );
+    log("recent:archive-fallback", { records: records.length, usable: usable.length });
+
+    return usable.slice(0, wanted).map(({ record, providerId }) => {
       const anilistId = Number.isInteger(record.anilist_id) ? record.anilist_id : null;
       const totalEps = record.real_episodes_count ?? record.episodes_count ?? 0;
       return {
@@ -396,7 +696,7 @@ export class AnimeUnityStreamProvider implements StreamProvider {
           english: record.title_eng?.trim() || record.title?.trim() || providerId,
           romanji: record.title?.trim() || undefined,
         },
-        thumbnail: absolutePosterUrl(record.imageurl),
+        thumbnail: absolutePosterUrl(record.imageurl, base),
         index: totalEps > 0 ? totalEps : 1,
         mode,
       };
@@ -430,20 +730,19 @@ export class AnimeUnityStreamProvider implements StreamProvider {
     type: string;
     description: string | null;
   }> {
-    const { anime, episodes } = await this.fetchAnimePage(providerId);
+    const { anime, episodes, base } = await this.fetchAnimePage(providerId);
     if (!anime) {
       throw new Error(`AnimeUnity show not found: ${providerId}`);
     }
     const anilistId = Number.isInteger(anime.anilist_id) ? anime.anilist_id : null;
-    const title =
-      anime.title_eng?.trim() || anime.title?.trim() || String(anime.id ?? providerId);
+    const title = anime.title_eng?.trim() || anime.title?.trim() || String(anime.id ?? providerId);
 
     log("show:details", { providerId, episodes: episodes.length });
     return {
       id: anilistId && anilistId > 0 ? String(anilistId) : providerId,
       providerId,
       name: title,
-      thumbnail: absolutePosterUrl(anime.imageurl),
+      thumbnail: absolutePosterUrl(anime.imageurl, base),
       type: anime.type?.trim() || "TV",
       description: anime.plot?.trim() || null,
     };
@@ -452,8 +751,7 @@ export class AnimeUnityStreamProvider implements StreamProvider {
   async getStreamUrl(
     _id: string | null,
     providerId: string | null,
-    episode: string,
-    _mode: StreamMode
+    episode: string
   ): Promise<StreamUrlResult> {
     if (!providerId) {
       throw new Error("AnimeUnity requires a providerId");
@@ -465,7 +763,7 @@ export class AnimeUnityStreamProvider implements StreamProvider {
     }
 
     // Episodes are matched on the displayed `number`, which is the sequential
-    // index the sidebar uses — not the absolute numbering inside `link`
+    // index the sidebar uses, not the absolute numbering inside `link`
     // (e.g. "DAN.DA.DAN.S03E13..." for what the UI calls episode 1).
     const wanted = episode.trim();
     const match =
@@ -476,15 +774,16 @@ export class AnimeUnityStreamProvider implements StreamProvider {
       throw new Error(`AnimeUnity episode ${wanted} not found for ${providerId}`);
     }
 
-    const { masterUrl } = await this.resolveMasterUrl(match.id!);
+    const { masterUrl, playerReferer } = await this.resolveMasterUrl(match.id);
 
     const masterResponse = await fetch(masterUrl, {
       headers: {
         Accept: "*/*",
         "User-Agent": getElectronUserAgent(),
-        Referer: VIX_REFERER,
-        Origin: VIX_REFERER.slice(0, -1),
+        Referer: playerReferer,
+        Origin: playerReferer.slice(0, -1),
       },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!masterResponse.ok) {
       throw new Error(`AnimeUnity master playlist failed (${masterResponse.status})`);
@@ -520,7 +819,7 @@ export class AnimeUnityStreamProvider implements StreamProvider {
     return {
       url: masterUrl,
       // VixCloud checks this Referer on both the playlist and the segments.
-      referer: VIX_REFERER,
+      referer: playerReferer,
       // Subtitles are burned into the video; there is no track to expose.
       subtitles: undefined,
       qualities,
@@ -528,7 +827,9 @@ export class AnimeUnityStreamProvider implements StreamProvider {
       // VixCloud serves the master from `/playlist/{id}` with no `.m3u8`
       // suffix, which the suffix-based playlist detection cannot see.
       isHlsMaster: true,
-      anilistMediaId: Number.isInteger(anime?.anilist_id) ? anime?.anilist_id ?? undefined : undefined,
+      anilistMediaId: Number.isInteger(anime?.anilist_id)
+        ? (anime?.anilist_id ?? undefined)
+        : undefined,
     };
   }
 }
