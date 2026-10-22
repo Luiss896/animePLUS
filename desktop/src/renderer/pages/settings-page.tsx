@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 
 import { AniListConnectDialog } from "@/renderer/components/anilist-connect-dialog";
+import { PageHeader } from "@/renderer/components/page-header";
 import { PalettePicker } from "@/renderer/components/palette-picker";
 import { ThemePicker } from "@/renderer/components/theme-picker";
 import { Button } from "@/renderer/components/ui/button";
-import { PageHeader } from "@/renderer/components/page-header";
 import { Card } from "@/renderer/components/ui/card";
 import {
   Select,
@@ -248,10 +248,7 @@ export function SettingsPage() {
 
   return (
     <div className="oa-page-enter w-full max-w-[1600px] mx-auto flex flex-col gap-6 p-6 md:p-8">
-      <PageHeader
-        title="Settings"
-        description="Account, playback and appearance."
-      />
+      <PageHeader title="Settings" description="Account, playback and appearance." />
 
       <Card as="section" className="p-5 flex flex-col gap-4">
         <div className="space-y-1 min-w-0">
@@ -383,7 +380,10 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card
+        as="section"
+        className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Incognito mode</h2>
           <p className="text-sm text-muted-foreground">
@@ -401,7 +401,10 @@ export function SettingsPage() {
         />
       </Card>
 
-      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <Card
+        as="section"
+        className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+      >
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Watch history</h2>
           <p className="text-sm text-muted-foreground">
@@ -421,7 +424,10 @@ export function SettingsPage() {
         </Button>
       </Card>
 
-      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card
+        as="section"
+        className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Streaming provider</h2>
           <p className="text-sm text-muted-foreground">
@@ -439,12 +445,12 @@ export function SettingsPage() {
             streamProviderLoading || streamProviderBusy || enabledStreamProviders.length === 0
           }
         >
-          <SelectTrigger className="sm:shrink-0 w-full sm:w-[220px]">
+          <SelectTrigger className="sm:shrink-0 w-full sm:w-[220px]" data-provider-select="trigger">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {enabledStreamProviders.map((provider) => (
-              <SelectItem key={provider} value={provider}>
+              <SelectItem key={provider} value={provider} data-provider-option={provider}>
                 {STREAM_PROVIDER_LABELS[provider]}
               </SelectItem>
             ))}
@@ -472,7 +478,10 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Card as="section" className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <Card
+        as="section"
+        className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+      >
         <div className="space-y-1 min-w-0">
           <h2 className="text-sm font-medium">Logs</h2>
           <p className="text-sm text-muted-foreground">

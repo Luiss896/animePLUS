@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
 import { Check } from "lucide-react";
+import React, { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { EpisodeCard } from "@/renderer/components/episode-card";
@@ -9,7 +9,7 @@ import { SectionHeading } from "@/renderer/components/section-heading";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Skeleton } from "@/renderer/components/ui/skeleton";
 import { useResumeHistoryEntry } from "@/renderer/hooks/use-resume-history-entry";
-import { useWatchedEpisodes, showIdCandidates } from "@/renderer/hooks/use-watched-episodes";
+import { showIdCandidates, useWatchedEpisodes } from "@/renderer/hooks/use-watched-episodes";
 import { useWelcomeRecentlyUploaded } from "@/renderer/hooks/use-welcome-recent-uploads";
 import { useWelcomeRecentlyWatched } from "@/renderer/hooks/use-welcome-recently-watched";
 import type { Episode, HistoryEntry } from "@/shared/types";
@@ -108,7 +108,7 @@ export function WelcomePage() {
         <div className="-mt-6 -mx-6 md:-mt-8 md:-mx-8">
           <HomeHeroCarousel />
         </div>
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-3" data-home-row="continue">
           <SectionHeading title="Continue watching" />
           {recentlyWatchedLoading ? (
             <p className="text-muted-foreground text-sm">Loading…</p>
@@ -124,7 +124,9 @@ export function WelcomePage() {
                  * being the show's most recent — which does happen when a later
                  * episode was never opened.
                  */
-                const watched = watchedFor(showIdCandidates(entry.episode.id, entry.episode.providerId));
+                const watched = watchedFor(
+                  showIdCandidates(entry.episode.id, entry.episode.providerId)
+                );
                 const label = historyEntryLabel(entry);
                 return (
                   <EpisodeCard
@@ -153,7 +155,7 @@ export function WelcomePage() {
             <p className="text-muted-foreground text-sm">No recently watched anime.</p>
           )}
         </section>
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-3" data-home-row="recent">
           <SectionHeading title="Recently uploaded" />
           {recentUploadsLoading ? (
             <RecentUploadsCarouselSkeleton />
@@ -162,9 +164,7 @@ export function WelcomePage() {
               items={recentUploads.map((episode) => {
                 // Recent uploads are keyed by the provider slug, which is the same
                 // identity history records, so the alias lookup matches directly.
-                const watched = watchedFor(
-                  showIdCandidates(episode.id, episode.providerId)
-                );
+                const watched = watchedFor(showIdCandidates(episode.id, episode.providerId));
                 const isWatched = watched?.has(episode.index) ?? false;
                 return {
                   id: `${episode.id || episode.providerId}-${episode.index}-${episode.mode}`,
