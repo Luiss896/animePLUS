@@ -1,13 +1,22 @@
-import { ArrowLeft, Loader2, Monitor, RefreshCw, Server, Sparkles, TriangleAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Monitor,
+  RefreshCw,
+  Server,
+  SkipForward,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-import { cn } from "@/renderer/lib/utils";
 import {
+  type SubtitlePreferences,
   readSubtitlePreferences,
   subtitleCueVariables,
   writeSubtitlePreferences,
-  type SubtitlePreferences,
 } from "@/renderer/helpers/player/subtitle-preferences";
+import { cn } from "@/renderer/lib/utils";
 import {
   DEFAULT_OUTPUT_RESOLUTION_ID,
   OUTPUT_RESOLUTIONS,
@@ -16,22 +25,16 @@ import {
 } from "@/shared/output-resolution";
 import {
   DEFAULT_SHADER_PRESET_ID,
-  SHADER_PRESET_IDS,
   SHADER_PRESETS,
+  SHADER_PRESET_IDS,
   type ShaderPresetId,
 } from "@/shared/shader-presets";
 
+import { Button } from "../ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Anime4kShaderOverlay, type Anime4kShaderStatus } from "./anime4k-shader-overlay";
 import { SubtitlePanel } from "./subtitle-panel";
-import { VideoJsReactPlayer, type PlayerSubtitleTrack } from "./videojs-react-player";
-import { Button } from "../ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
+import { type PlayerSubtitleTrack, VideoJsReactPlayer } from "./videojs-react-player";
 
 const watchSelectTriggerClass =
   "h-8 w-[132px] shrink-0 border-white/25 bg-white/[0.12] text-white shadow-sm backdrop-blur-xl ring-offset-0 ring-offset-transparent placeholder:text-white/55 focus:ring-2 focus:ring-white/30 focus:ring-offset-0 hover:bg-white/[0.18] [&>svg]:text-white/75 [&>span]:truncate [&>span]:whitespace-nowrap";
@@ -49,6 +52,33 @@ const SHADER_LABELS: Record<ShaderPresetId, string> = SHADER_PRESET_IDS.reduce(
   },
   {} as Record<ShaderPresetId, string>
 );
+
+/**
+ * How far the "skip intro" control jumps.
+ *
+ * Every anime source shows the opening inside the episode, so there is no
+ * separate item to skip: the only way to get past it is to move the playhead.
+ * 90 seconds covers the usual TV opening (1:25 to 1:30 plus the cold open that
+ * sometimes precedes it) while staying short enough that landing a few seconds
+ * into the episode is a harmless correction rather than a lost scene.
+ *
+ * The range it is offered in matters as much as the amount:
+ *
+ *  - Before `INTRO_SKIP_VISIBLE_FROM_SECONDS` the button would be offered before
+ *    the opening has actually started, inviting an accidental jump on every load.
+ *  - After `INTRO_SKIP_WINDOW_SECONDS` the opening has passed for any normal
+ *    episode, so the same jump would silently cut content. Hiding it there is
+ *    what keeps this from being a second, unlabelled seek-forward button.
+ */
+const INTRO_SKIP_SECONDS = 90;
+const INTRO_SKIP_VISIBLE_FROM_SECONDS = 1;
+const INTRO_SKIP_WINDOW_SECONDS = 120;
+
+function formatSkipLength(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes)}:${String(seconds).padStart(2, "0")}`;
+}
 
 interface WatchVideoPlayerShellProps {
   playUrl: string;
@@ -155,6 +185,23 @@ export function WatchVideoPlayerShell({
   const [shaderStatus, setShaderStatus] = useState<Anime4kShaderStatus>({ kind: "idle" });
 
   /*
+   * Intro skip state.
+   *
+   * `playbackSeconds` mirrors the media element's own clock because the shell does
+   * not receive playback position as a prop: the <video> is the source of truth,
+   * and reading it once per `timeupdate` (about four times a second) is cheaper
+   * than lifting playback state up into the watch page, which re-renders the
+   * player tree.
+   *
+   * `introSkipped` is latched per stream rather than derived from the clock alone:
+   * after a jump of 90 seconds the playhead is still inside the visible window for
+   * another half minute, and a button that keeps offering the same jump reads as
+   * broken.
+   */
+  const [playbackSeconds, setPlaybackSeconds] = useState(0);
+  const [introSkipped, setIntroSkipped] = useState(false);
+
+  /*
    * Subtitle appearance lives here rather than in the watch page because it is
    * purely presentational: the values are written as CSS custom properties that
    * `.oa-cue-scope video::cue` reads. They persist across sessions via
@@ -168,13 +215,41 @@ export function WatchVideoPlayerShell({
     writeSubtitlePreferences(subtitlePreferences);
   }, [subtitlePreferences]);
 
-  const cueVariables = useMemo(() => subtitleCueVariables(subtitlePreferences), [subtitlePreferences]);
+  const cueVariables = useMemo(
+    () => subtitleCueVariables(subtitlePreferences),
+    [subtitlePreferences]
+  );
 
   useEffect(() => {
     // A new stream means the old pipeline is gone; reset the reported status so
     // a stale "active" badge is never shown over a fresh source.
     setShaderStatus({ kind: "idle" });
   }, [streamRevision]);
+
+  useEffect(() => {
+    // Another episode, or a reload after an error, gets its own intro.
+    setPlaybackSeconds(0);
+    setIntroSkipped(false);
+  }, [streamRevision]);
+
+  useEffect(() => {
+    if (!playUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const sync = () => {
+      setPlaybackSeconds(Number.isFinite(video.currentTime) ? video.currentTime : 0);
+    };
+    sync();
+    video.addEventListener("timeupdate", sync);
+    video.addEventListener("seeked", sync);
+    video.addEventListener("loadedmetadata", sync);
+    return () => {
+      video.removeEventListener("timeupdate", sync);
+      video.removeEventListener("seeked", sync);
+      video.removeEventListener("loadedmetadata", sync);
+    };
+  }, [playUrl, streamRevision, videoRef]);
 
   useEffect(() => {
     // Keep subtitles off until the user picks one (or playback starts and we
@@ -198,9 +273,7 @@ export function WatchVideoPlayerShell({
       setActiveSubtitleLabel((current) => {
         if (current != null) return current;
         return (
-          subtitleTracks.find((track) => track.default)?.label ??
-          subtitleTracks[0]?.label ??
-          null
+          subtitleTracks.find((track) => track.default)?.label ?? subtitleTracks[0]?.label ?? null
         );
       });
     };
@@ -301,6 +374,25 @@ export function WatchVideoPlayerShell({
     isOutputSelectOpen ||
     isHostSelectOpen;
 
+  const canOfferIntroSkip =
+    Boolean(playUrl) &&
+    !playbackError &&
+    !introSkipped &&
+    playbackSeconds > INTRO_SKIP_VISIBLE_FROM_SECONDS &&
+    playbackSeconds < INTRO_SKIP_WINDOW_SECONDS;
+
+  const onSkipIntro = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+    const target = playbackSeconds + INTRO_SKIP_SECONDS;
+    // Never seek onto (or past) the last second: an exact seek to `duration` ends
+    // the episode, which is the opposite of what this control is for.
+    video.currentTime = duration != null ? Math.min(target, Math.max(0, duration - 1)) : target;
+    setIntroSkipped(true);
+    setPlaybackSeconds(video.currentTime);
+  };
+
   return (
     <div
       ref={shellRef}
@@ -379,6 +471,31 @@ export function WatchVideoPlayerShell({
                   <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
                   <span>{qualityWarning}</span>
                 </div>
+              </div>
+            ) : null}
+            {/*
+              Sits above the control bar (bottom-20 clears it) and above the video
+              surface, so it stays reachable while the controls are hidden. The
+              skin's own -10s / +10s buttons are two small icon buttons in the
+              control bar; this is a labelled action that only exists during the
+              opening, which is why it is not forced into that row.
+            */}
+            {canOfferIntroSkip ? (
+              <div className="absolute bottom-20 right-4 z-20">
+                <button
+                  type="button"
+                  data-skip-intro="1"
+                  onClick={onSkipIntro}
+                  title={`Jump ${String(INTRO_SKIP_SECONDS)} seconds ahead, past the opening`}
+                  aria-label={`Skip intro, jump ${String(INTRO_SKIP_SECONDS)} seconds ahead`}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/25 bg-black/65 px-4 py-2 text-sm font-medium text-white shadow-lg backdrop-blur-md transition-colors hover:bg-black/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70"
+                >
+                  <SkipForward className="h-4 w-4" aria-hidden="true" />
+                  Skip intro
+                  <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white/80">
+                    {formatSkipLength(INTRO_SKIP_SECONDS)}
+                  </span>
+                </button>
               </div>
             ) : null}
             {playbackError ? (
@@ -467,6 +584,7 @@ export function WatchVideoPlayerShell({
               <SelectTrigger
                 className={cn(watchSelectTriggerClass, "w-[152px]")}
                 title="Change streaming host — pick one that carries Italian subtitles"
+                data-host-select="trigger"
               >
                 {switchingHost ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-white/70" />
@@ -477,7 +595,12 @@ export function WatchVideoPlayerShell({
               </SelectTrigger>
               <SelectContent className={watchSelectContentClass}>
                 {availableHosts.map((host) => (
-                  <SelectItem key={host.id} value={host.id} className={watchSelectItemClass}>
+                  <SelectItem
+                    key={host.id}
+                    value={host.id}
+                    className={watchSelectItemClass}
+                    data-host-option={host.id}
+                  >
                     <span className="flex flex-col gap-0.5">
                       <span>{host.label}</span>
                       <span className="text-[11px] leading-snug text-white/60">
@@ -565,11 +688,7 @@ export function WatchVideoPlayerShell({
               </SelectTrigger>
               <SelectContent className={watchSelectContentClass}>
                 {streamQualities.map((quality) => (
-                  <SelectItem
-                    key={quality.id}
-                    value={quality.id}
-                    className={watchSelectItemClass}
-                  >
+                  <SelectItem key={quality.id} value={quality.id} className={watchSelectItemClass}>
                     {quality.label}
                   </SelectItem>
                 ))}
