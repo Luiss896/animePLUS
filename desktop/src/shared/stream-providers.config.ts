@@ -11,11 +11,14 @@
  *   the player quality selector (and the 1080p warning) meaningful.
  *
  * - `animeunity` — ITALIAN SUB FALLBACK. Enabled because the other sources do not
- *   guarantee Italian subtitles for every episode. It publishes two entries per
- *   show and the `dub` flag separates them, so only the `dub: 0` release is used:
- *   Japanese audio with burned-in Italian subtitles. Verified end-to-end against
- *   the live site (search -> episode list -> embed -> HLS master carrying the
- *   1080p rendition, with segments downloadable through the local proxy).
+ *   guarantee Italian subtitles for every episode. The site was rebuilt in
+ *   November 2026: a show is published once and its episodes carry one video per
+ *   audio variant, so only the original-audio release (jpn/chn, never the `ita`
+ *   dub) is offered — Italian subtitles burned into the video. Verified end to end
+ *   against the live site (search -> episode list -> embed URL from the episode
+ *   page -> HLS master carrying the 1080p rendition, with segments downloadable
+ *   through the local proxy). Its host is discovered at runtime, redirects
+ *   included; see `animeunity-stream-provider.ts`.
  *
  * - `reanime` — DISABLED. Search, episode lists and subtitle tracks all work, and
  *   its subtitle conversion is verified, BUT it cannot play video: every playlist

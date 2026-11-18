@@ -92,8 +92,11 @@ and instantiated regardless, so enabling or disabling one is a one line change.
 > guarantees Italian subtitles, at the cost of them being permanent and burned in.
 
 > **On source domains:** providers move. AnimeUnity has changed site domain and player domain more
-> than once, which is why its host is resolved at runtime from a candidate list instead of being
-> hardcoded. If a source suddenly returns nothing, that resolution is the first place to look.
+> than once. Its host is therefore discovered at runtime instead of being hardcoded: old domains that
+> still redirect are followed, and if none answers the candidate TLDs are swept — every candidate has
+> to return the real catalogue before it is trusted. The player domain is read from the embed URL.
+> `ANIMEUNITY_BASE` pins a host when needed. If a source suddenly returns nothing, that resolution is
+> the first place to look.
 
 ## Installation
 
